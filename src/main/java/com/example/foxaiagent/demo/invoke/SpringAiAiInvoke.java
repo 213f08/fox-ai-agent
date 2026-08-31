@@ -7,7 +7,9 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
-@Component
+// 教程学完后已停用：@Component 会让每次启动（含所有测试）都自动调一次 API、多花约 6 秒
+// 想单独验证时，取消下行注释再运行即可
+//@Component
 public class SpringAiAiInvoke implements CommandLineRunner {
     @Resource
     private ChatModel dashscopeChatModel;

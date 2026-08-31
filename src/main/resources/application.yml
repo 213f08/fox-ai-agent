@@ -28,3 +28,7 @@ knife4j:
   enable: true
   setting:
     language: zh_cn
+logging:
+  level:
+    org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor: debug
+    com.example.foxaiagent.Advisor: debug # 自定义 MyLoggerAdvisor 的 BEFORE/AFTER 日志

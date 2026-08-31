@@ -38,3 +38,7 @@ build/
 application-local*.yml
 TestApiKey.java
 
+tmp/
+
+### WorkBuddy 项目数据（含个人隐私，禁止提交） ###
+.workbuddy/

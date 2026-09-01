@@ -10,6 +10,11 @@ server:
   servlet:
     context-path: /api
 
+# 智能客服业务配置
+customer-app:
+  knowledge-index: 客服助手知识库
+  # 云知识库名称（需在百炼控制台创建同名知识库，用名称不是 ID）
+
 # springdoc-openapi 接口文档配置
 springdoc:
   swagger-ui:

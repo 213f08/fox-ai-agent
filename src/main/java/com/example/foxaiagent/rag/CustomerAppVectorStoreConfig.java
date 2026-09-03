@@ -1,5 +1,6 @@
 package com.example.foxaiagent.rag;
 
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -20,20 +21,22 @@ import java.util.List;
 @Configuration
 @Slf4j
 public class CustomerAppVectorStoreConfig {
-
+    @Resource
+    private  MyTokenTextSplitter myTokenTextSplitter;
+    @Resource
+    private MyKeyWordEnricher myKeyWordEnricher;
     @Bean
     public VectorStore customerAppVectorStore(EmbeddingModel embeddingModel, CustomerAppDocumentLoader documentLoader) {
         SimpleVectorStore vectorStore = SimpleVectorStore.builder(embeddingModel).build();
 
         List<Document> documents = documentLoader.loadMarkdowns();
         log.info("加载到 {} 份知识文档，开始写入向量库...", documents.size());
-        for (Document doc : documents) {
-            String text = doc.getText().replace("\n", " ").trim();
-            String preview = text.length() > 60 ? text.substring(0, 60) + "..." : text;
-            log.info("  - [{}] {}", doc.getMetadata().get("filename"), preview);
-        }
-        vectorStore.add(documents);
-        log.info("向量库初始化完成，共写入 {} 个文档片段", documents.size());
+        //效果不好，所以注释，仅学习
+//        List<Document> splitDocuments = myTokenTextSplitter.splitCustomized(documents);
+//        自动补充关键词元信息
+        List<Document> enrichDocuments = myKeyWordEnricher.enrichDocuments(documents);
+        vectorStore.add(enrichDocuments);
+        log.info("向量库初始化完成，共写入 {} 个文档片段", enrichDocuments.size());
         return vectorStore;
     }
 }

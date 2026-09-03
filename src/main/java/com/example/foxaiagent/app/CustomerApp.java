@@ -1,13 +1,16 @@
 package com.example.foxaiagent.app;
 
-import com.example.foxaiagent.Advisor.MyLoggerAdvisor;
+import com.example.foxaiagent.advisor.MyLoggerAdvisor;
 import com.example.foxaiagent.chatmemory.FileBaseChatMemory;
+import com.example.foxaiagent.rag.QueryRewriter;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
-import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -30,9 +33,11 @@ import java.util.List;
 @Component
 @Slf4j
 public class CustomerApp {
-
+    @Resource
+    private VectorStore pgVectorStore;
     private final ChatClient chatClient;
-
+    @Resource
+    private QueryRewriter queryRewriter;
     /**
      * 系统提示词：设定助手的角色、风格和边界，每次对话自动携带
      */
@@ -141,38 +146,44 @@ public class CustomerApp {
     /**
      * 云知识库检索增强顾问（由 CustomerAppCloudAdvisorConfig 注入）
      */
-    @Resource
+    @Autowired(required = false)
+    @Qualifier("customerAppRagCloudAdvisor")
     private Advisor customerAppRagCloudAdvisor;
 
     public String doChatWithRag(String message, String chatId) {
+        // 查询重写
+        String rewritten = queryRewriter.doQueryRewriter(message);
         ChatResponse chatResponse = chatClient
                 .prompt()
-                .user(message)
+                .user(rewritten)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
-                .advisors(QuestionAnswerAdvisor.builder(customerAppVectorStore).build())
+                // 云端知识库 RAG；只需本地时注释此行，并取消下一行注释
+                .advisors(customerAppRagCloudAdvisor)
+                // .advisors(QuestionAnswerAdvisor.builder(pgVectorStore).build())
+                //文档检索增强
+//                .advisors(
+//                        CustomerAppRagCustomerAdvisorFactory.creatCustomerAppRagCustomerAdvisor(
+//                            customerAppVectorStore, "物流"
+//                        )
+//                )
                 .call()
                 .chatResponse();
         String content = chatResponse.getResult().getOutput().getText();
         log.info("content: {}", content);
         return content;
     }
+    @Resource
+    private ToolCallback[] allTools;
 
-    /**
-     * 云知识库 RAG：每次对话前，RetrievalAugmentationAdvisor 会去阿里云百炼云知识库
-     * 检索与问题相关的文档切片，并作为上下文拼进提示词，再让大模型基于文档回答。
-     * <p>
-     * 使用前提：已在百炼控制台创建 customer-app.knowledge-index 配置的同名知识库。
-     */
-    public String doChatWithCloudRag(String message, String chatId) {
-        ChatResponse chatResponse = chatClient
-                .prompt()
+    public String doChatWithTools(String message, String chatId) {
+        String answer = chatClient.prompt()
                 .user(message)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
-                .advisors(customerAppRagCloudAdvisor)
+                // allTools 已是 ToolCallback[]，须用 .toolCallbacks() 而非 .tools()
+                .toolCallbacks(allTools)
                 .call()
-                .chatResponse();
-        String content = chatResponse.getResult().getOutput().getText();
-        log.info("content: {}", content);
-        return content;
+                .content();
+        log.info("answer: {}", answer);
+        return answer;
     }
 }

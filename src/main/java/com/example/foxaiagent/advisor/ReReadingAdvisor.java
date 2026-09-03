@@ -1,4 +1,4 @@
-package com.example.foxaiagent.Advisor;
+package com.example.foxaiagent.advisor;
 
 import org.springframework.ai.chat.client.ChatClientRequest;
 import org.springframework.ai.chat.client.ChatClientResponse;

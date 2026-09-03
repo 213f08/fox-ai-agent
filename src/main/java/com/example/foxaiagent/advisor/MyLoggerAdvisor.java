@@ -1,4 +1,4 @@
-package com.example.foxaiagent.Advisor;
+package com.example.foxaiagent.advisor;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClientMessageAggregator;

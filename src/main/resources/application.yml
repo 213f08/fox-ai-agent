@@ -3,7 +3,14 @@ spring:
     name: Fox-ai-agent
   profiles:
     active: local # 默认启用 local 配置
-
+  ai:
+    vectorstore:
+      pgvector:
+        index-type: HNSW
+        dimensions: 1536
+        distance-type: COSINE_DISTANCE
+        max-document-batch-size: 10000
+        initialize-schema: true
 
 server:
   port: 8123
@@ -36,4 +43,4 @@ knife4j:
 logging:
   level:
     org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor: debug
-    com.example.foxaiagent.Advisor: debug # 自定义 MyLoggerAdvisor 的 BEFORE/AFTER 日志
+    com.example.foxaiagent.advisor: debug # 自定义 MyLoggerAdvisor 的 BEFORE/AFTER 日志

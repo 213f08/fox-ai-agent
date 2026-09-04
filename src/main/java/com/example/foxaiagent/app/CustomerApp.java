@@ -6,6 +6,7 @@ import com.example.foxaiagent.rag.QueryRewriter;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.ai.chat.client.ChatClient;
@@ -181,6 +182,19 @@ public class CustomerApp {
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
                 // allTools 已是 ToolCallback[]，须用 .toolCallbacks() 而非 .tools()
                 .toolCallbacks(allTools)
+                .call()
+                .content();
+        log.info("answer: {}", answer);
+        return answer;
+    }
+    @Autowired(required = false)
+    private ToolCallbackProvider toolCallbackProvider;
+    public String doChatWithMCP(String message, String chatId) {
+        String answer = chatClient.prompt()
+                .user(message)
+                .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
+                // allTools 已是 ToolCallback[]，须用 .toolCallbacks() 而非 .tools()
+                .toolCallbacks(toolCallbackProvider)
                 .call()
                 .content();
         log.info("answer: {}", answer);

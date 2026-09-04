@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: fox-image-search-mcp-server
+  # 激活的传输 profile：默认 stdio，切换 SSE 时改为 sse
+  # （对应加载 application-stdio.yml / application-sse.yml）
+  # local：加载本机 application-local.yml（含本地 API Key，已被 git 忽略，不提交仓库）。
+  # 云端/CI 没有该文件时 key 回落到环境变量 PEXELS_API_KEY。
+  profiles:
+    active: sse,local
+server:
+  port: 8127
+
+# Pexels 图片搜索 API Key（https://www.pexels.com/api/ 申请）
+# 安全要求：禁止把 key 明文写进仓库！通过环境变量注入：
+#   Windows PowerShell: $env:PEXELS_API_KEY='你的key'
+#   IDEA 运行配置:      Environment variables 里填 PEXELS_API_KEY=你的key
+pexels:
+  api-key: ${PEXELS_API_KEY:}

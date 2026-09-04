@@ -1,0 +1,9 @@
+# SSE 传输 profile：客户端通过 http://<host>:<port>/sse 订阅
+spring:
+  ai:
+    mcp:
+      server:
+        name: fox-image-search-mcp-server
+        version: 0.0.1
+        type: SYNC
+        stdio: false

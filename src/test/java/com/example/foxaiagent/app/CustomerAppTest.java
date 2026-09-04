@@ -3,6 +3,8 @@ package com.example.foxaiagent.app;
 import jakarta.annotation.Resource;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.document.Document;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -20,6 +22,9 @@ class CustomerAppTest {
 
     @Resource
     private VectorStore customerAppVectorStore;
+
+    @Resource
+    private ToolCallbackProvider toolCallbackProvider;
 
     // 进程内固定、跨进程随机：避免本地落盘记忆跨运行累积，同时保证同进程内多轮共享同一 chatId
     private static final String RUN_ID = "t" + UUID.randomUUID().toString().substring(0, 8);
@@ -86,5 +91,33 @@ class CustomerAppTest {
         System.out.println("回答：" + answer);
         assertNotNull(answer);
         assertFalse(answer.isBlank());
+    }
+
+    @Test
+    void doChatWithMCP() {
+        String chatId =UUID.randomUUID().toString();
+//        测试地图mcp
+        String answer = customerApp.doChatWithMCP("帮我看看江汉路附近有什么玩的地方", chatId);
+        System.out.println("回答：" + answer);
+        assertNotNull(answer);
+        assertFalse(answer.isBlank());
+        //        测试图片搜索MCP
+        answer = customerApp.doChatWithMCP("帮我搜索一张江汉路的图片", chatId);
+        assertNotNull(answer);
+    }
+
+    /**
+     * 验证 MCP 客户端连接：列出远程 MCP 服务器注册的全部工具，
+     * 列表非空即说明高德地图 MCP 连接成功
+     */
+    @Test
+    void listMcpTools() {
+        ToolCallback[] callbacks = toolCallbackProvider.getToolCallbacks();
+        System.out.println("MCP 工具总数：" + callbacks.length);
+        for (ToolCallback callback : callbacks) {
+            System.out.println("MCP工具：" + callback.getToolDefinition().name()
+                    + " —— " + callback.getToolDefinition().description());
+        }
+        assertFalse(callbacks.length == 0, "未注册任何 MCP 工具，MCP 客户端连接失败");
     }
 }

@@ -29,6 +29,18 @@
     <properties>
         <java.version>21</java.version>
     </properties>
+    <dependencyManagement>
+        <dependencies>
+            <!-- 强制 MCP Java SDK 与 Spring AI 1.1.2 / fox server(mcp-spring-webmvc 0.17.0) 版本对齐。
+                否则 spring-ai-alibaba-agent-framework 1.1.2.0 会把 io.modelcontextprotocol.sdk:mcp 传递降级到
+                0.14.0，造成新旧 SDK 混跑（SSE/HTTP 传输偶发 405 Method not allowed、响应解析异常）。 -->
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp</artifactId>
+                <version>0.17.0</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -50,6 +62,12 @@
             <groupId>com.alibaba.cloud.ai</groupId>
             <artifactId>spring-ai-alibaba-starter-dashscope</artifactId>
             <version>1.1.2.0</version>
+        </dependency>
+        <!-- Spring MCP 客户端（必须显式写版本，否则解析成 unknown 依赖加载失败） -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-mcp-client</artifactId>
+            <version>1.1.2</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>

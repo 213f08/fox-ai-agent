@@ -1,8 +1,10 @@
 HELP.md
-
-
 target/
 .mvn/wrapper/maven-wrapper.jar
+
+# 本地敏感配置：存放真实 API Key，严禁提交
+src/main/resources/application-local.yml
+application-local.yml
 !**/src/main/**/target/
 !**/src/test/**/target/
 
@@ -33,18 +35,3 @@ build/
 
 ### VS Code ###
 .vscode/
-
-### 本地配置（含 API Key 等敏感信息，禁止提交） ###
-application-local*.yml
-TestApiKey.java
-mcp-servers.json
-tmp/
-
-### WorkBuddy 项目数据（含个人隐私，禁止提交） ###
-.workbuddy/
-
-### 误生成目录（根级 com/ 非源码包，禁止提交） ###
-/com/
-
-### CodeBuddy 项目数据（含个人隐私，禁止提交） ###
-.codebuddy/

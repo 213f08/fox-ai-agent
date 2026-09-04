@@ -4,6 +4,35 @@ spring:
   profiles:
     active: local # 默认启用 local 配置
   ai:
+    mcp:
+      client:
+        # 高德地图 MCP 为 streamable HTTP 类型；
+        # streamable-http 只支持 connections 内联声明（servers-configuration 是 stdio 专属，写了会被静默忽略）
+        streamable-http:
+          connections:
+            amap-maps:
+              url: https://mcp.amap.com
+              endpoint: /mcp?key=${amap.api-key}
+        # Pexels 图片搜索 MCP Server：SSE 方式连接本地 fox（fox-image-search-mcp-server，端口 8127）
+        # 注意：fox 端必须用 spring-ai-starter-mcp-server-webmvc（纯 stdio starter 不注册 /sse）。
+        # 属性结构见 spring-ai-autoconfigure-mcp-client-common 1.1.2 的 McpSseClientProperties：
+        # CONFIG_PREFIX=spring.ai.mcp.client.sse，Map<String, SseParameters> connections（复数 connections，写单数会被静默忽略）
+        sse:
+          connections:
+            fox-image-search:
+              url: http://localhost:8127
+#        stdio:
+#          connections:
+#            fox-image-search:
+#              command: java
+#              args:
+#                - "-Dspring.ai.mcp.server.stdio=true"
+#                - "-Dspring.main.web-application-type=none"
+#                - "-jar"
+#                - "E:/Code/Java/Fox-ai-agent/fox-image-search-mcp-server/target/fox-image-search-mcp-server-0.0.1-SNAPSHOT.jar"
+#                - "--spring.profiles.active=stdio"
+#              env:
+#                PEXELS_API_KEY: ${pexels.api-key:}
     vectorstore:
       pgvector:
         index-type: HNSW
@@ -44,3 +73,5 @@ logging:
   level:
     org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor: debug
     com.example.foxaiagent.advisor: debug # 自定义 MyLoggerAdvisor 的 BEFORE/AFTER 日志
+    org.springframework.ai.mcp: info # MCP 客户端连接 / 工具注册日志
+    io.modelcontextprotocol: info # MCP 底层传输日志

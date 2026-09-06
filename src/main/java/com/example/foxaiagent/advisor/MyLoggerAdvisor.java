@@ -54,8 +54,20 @@ public class MyLoggerAdvisor implements CallAdvisor, StreamAdvisor {
      * @return 原样返回的请求
      */
     private ChatClientRequest before(ChatClientRequest request) {
-        log.info("AI Request: {}", request.prompt().getUserMessage().getText());
+        // 请求文本压缩成一行并截断：每轮思考都会把同一段系统提示/指令发给模型，全量打印会很吵
+        log.info("AI Request: {}", brief(request.prompt().getUserMessage().getText()));
         return request;
+    }
+
+    /**
+     * 压缩超长文本：去掉换行和多余空白，超出 300 字符截断。
+     */
+    private static String brief(String text) {
+        if (text == null) {
+            return "";
+        }
+        String oneLine = text.replaceAll("\\s+", " ").trim();
+        return oneLine.length() <= 300 ? oneLine : oneLine.substring(0, 300) + "…(已截断)";
     }
 
     /**

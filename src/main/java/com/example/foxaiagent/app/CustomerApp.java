@@ -17,6 +17,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
@@ -110,11 +111,21 @@ public class CustomerApp {
         log.info("content: {}", content);
         return content;
     }
+    public Flux<String> doChatByStream(String message, String chatId) {
+        return chatClient.prompt()
+                .user(message)
+                // 指定本次对话属于哪个会话（教程旧常量 CHAT_MEMORY_CONVERSATION_ID_KEY 的现名）
+                .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
+                .stream()
+                .content();
+
+    }
     /**
      * 结构化输出：让模型按固定 JSON 结构返回服务报告
      * 字段名即模型要返回的 JSON key，Jackson 会自动反序列化
+     * public 修饰，供 controller 层跨包返回该结构
      */
-    record CustomerReport(String title, List<String> services) {
+    public record CustomerReport(String title, List<String> services) {
     }
 
     /**

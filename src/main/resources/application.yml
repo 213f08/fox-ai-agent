@@ -6,13 +6,12 @@ spring:
   ai:
     mcp:
       client:
-        # 高德地图 MCP 为 streamable HTTP 类型；
-        # streamable-http 只支持 connections 内联声明（servers-configuration 是 stdio 专属，写了会被静默忽略）
-        streamable-http:
-          connections:
-            amap-maps:
-              url: https://mcp.amap.com
-              endpoint: /mcp?key=${amap.api-key}
+        # 高德地图 MCP（当前不可用：INVALID_USER_KEY 10001，且会拖崩应用启动，先注释保命）
+        # 接入前确认：在高德 lbs.amap.com/api/mcp-server 申请 MCP 专用 key（不是普通 Web 服务 key），并开通对应服务
+        # streamable-http:
+        #   connections:
+        #     amap-maps:
+        #       url: https://mcp.amap.com/mcp?key=${amap.api-key}
         # Pexels 图片搜索 MCP Server：SSE 方式连接本地 fox（fox-image-search-mcp-server，端口 8127）
         # 注意：fox 端必须用 spring-ai-starter-mcp-server-webmvc（纯 stdio starter 不注册 /sse）。
         # 属性结构见 spring-ai-autoconfigure-mcp-client-common 1.1.2 的 McpSseClientProperties：

@@ -146,6 +146,17 @@ public class ToolCallAgent extends ReActAgent {
                 setState(AgentState.FINISHED);
                 return false;
             }
+            // 若模型已给出文本回答、且本轮唯一动作是调用终止工具(doTerminate)，
+            // 说明这是"最终回答 + 请求结束"：直接采纳文本回答，不再走工具执行路径，
+            // 否则回答文本会被"工具执行结果"日志覆盖，用户看不到 AI 回复。
+            boolean onlyTerminate = toolCallList.stream()
+                    .allMatch(toolCall -> "doTerminate".equals(toolCall.name()));
+            if (onlyTerminate && StrUtil.isNotBlank(assistantMessage.getText())) {
+                log.info("{} 思考完成：模型给出最终回答并请求终止，直接采纳回答", getName());
+                getMessageList().add(assistantMessage);
+                setState(AgentState.FINISHED);
+                return false;
+            }
             // 一行日志概要展示本轮要调用的工具（含参数摘要，不刷屏）
             String toolCallInfo = toolCallList.stream()
                     .map(toolCall -> toolCall.name() + "(" + shorten(toolCall.arguments(), 100) + ")")

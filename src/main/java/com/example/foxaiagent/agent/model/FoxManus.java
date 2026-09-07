@@ -24,10 +24,11 @@ public  class FoxManus extends ToolCallAgent{
                 """;
         this.setSystemPrompt(SYSTEM_PROMPT);
         String NEXT_STEP_PROMPT = """
-                Based on user needs, proactively select the most appropriate tool or combination of tools.
-                For complex tasks, you can break down the problem and use different tools step by step to solve it.
-                After using each tool, clearly explain the execution results and suggest the next steps.
-                If you want to stop the interaction at any point, use the `terminate` tool/function call.
+                Decide whether tools are actually needed for the user's request:
+                - For simple conversations, greetings, or general knowledge questions, answer directly in natural language WITHOUT calling any tool.
+                - Only call tools when the task truly requires them (web search, scraping, PDF generation, image search, etc.).
+                - When you do use tools, explain the results clearly and continue until the task is complete.
+                - When the task is done, give the user a final natural-language answer, then call the `terminate` tool to end.
                 """;
         this.setNextStepPrompt(NEXT_STEP_PROMPT);
         setMaxSteps(20);

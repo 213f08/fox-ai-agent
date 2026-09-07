@@ -118,15 +118,16 @@ public abstract class BaseAgent {
                     log.info("Step {}/{} :", stepNumber,maxSteps);
 //            单步执行
                     String stepResult=step();
-                    String result="Step"+stepNumber+": "+stepResult;
-                    results.add(result);
-                    sseEmitter.send(result);
+                    results.add(stepResult);
+                    sseEmitter.send(stepResult);
                 }
                 if (currentStep>=maxSteps){
                     state=AgentState.FINISHED;
                     results.add("Terminated: Reached max steps ("+maxSteps+")");
                     sseEmitter.send("执行结束，达到最大步骤("+maxSteps+")");
                 }
+                // 正常结束：主动关闭 SSE 连接，否则前端 fetch 会一直等待直至超时
+                sseEmitter.complete();
             } catch (Exception e) {
                 state=AgentState.ERROR;
                 log.info("Agent 执行出错：{}", e.getMessage());

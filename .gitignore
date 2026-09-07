@@ -48,3 +48,10 @@ tmp/
 
 ### CodeBuddy 项目数据（含个人隐私，禁止提交） ###
 .codebuddy/
+
+### 前端工程（Vite）依赖与构建产物，禁止提交 ###
+frontend/node_modules/
+frontend/dist/
+
+### 运行/调试日志（禁止提交） ###
+*.log

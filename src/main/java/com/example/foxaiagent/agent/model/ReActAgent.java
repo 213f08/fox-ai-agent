@@ -13,6 +13,13 @@ import java.util.List;
 @Data
 @Slf4j
 public abstract class ReActAgent extends BaseAgent{
+    /**
+     * 最近一次 step() 的输出类型：
+     * - tool  ：工具执行过程（原始返回数据，前端折叠展示，默认不铺开给用户）
+     * - answer：面向用户的最终回答
+     */
+    private String lastStepType = "answer";
+
     public abstract boolean think();
     public abstract String act();
 
@@ -21,10 +28,13 @@ public abstract class ReActAgent extends BaseAgent{
       try {
           boolean shouldAct = think();
           if (!shouldAct) {
+              lastStepType = "answer";   // 模型直接给出答复
               return lastAssistantText();
           }
+          lastStepType = "tool";         // 本轮是工具执行过程
           return act();
       } catch (Exception e) {
+          lastStepType = "tool";         // 异常摘要也归为过程信息
           // 只返回一行错误摘要，避免把整段堆栈/超长消息带进结果
           String msg = e.getMessage();
           String brief = (msg == null || msg.isBlank())

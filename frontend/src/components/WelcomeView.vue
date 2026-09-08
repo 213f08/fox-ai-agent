@@ -39,7 +39,7 @@ function send(text) {
 <template>
   <div class="welcome">
     <div class="hero">
-      <div class="brand-emoji">🦊</div>
+      <img class="brand-logo" src="/logo-fox.png" alt="Fox AI 智能体" />
       <h1 class="brand-title brand-gradient">Fox AI 智能体百宝箱</h1>
       <p class="brand-sub">一个框，解决你的搜索、抓取、报告与图片需求</p>
 
@@ -106,10 +106,11 @@ function send(text) {
   max-width: 860px;
 }
 
-.brand-emoji {
-  font-size: 44px;
-  line-height: 1;
+.brand-logo {
+  width: 64px;
+  height: 64px;
   margin-bottom: 14px;
+  border-radius: 50%;
   filter: drop-shadow(0 6px 16px rgba(47, 107, 255, 0.25));
 }
 

@@ -18,15 +18,29 @@ export default http
  *
  * @param {string} message 用户问题
  * @param {string} chatId   会话 id（后端仅做必填参数，无跨请求上下文）
- * @param {{onChunk?: (text:string)=>void, onDone?: ()=>void, onError?: (e:Error)=>void}} handlers
+ * @param {{onChunk?: (chunk:{type:string,content:string})=>void, onDone?: ()=>void, onError?: (e:Error)=>void, onAbort?: ()=>void, signal?: AbortSignal}} handlers
+ *        - onAbort: 用户主动终止（外部 signal abort）时回调，不视为错误
+ *        - signal:  外部传入的 AbortSignal（如“停止生成”按钮），用于中途切断连接
  */
-export async function fetchSseChat(message, chatId, { onChunk, onDone, onError } = {}) {
+export async function fetchSseChat(message, chatId, { onChunk, onDone, onError, onAbort, signal } = {}) {
   const url = `/api/ai/manus/chat?message=${encodeURIComponent(message)}&chatId=${encodeURIComponent(chatId)}`
 
-  // 超时保护：AI 生成可能较慢，但若连接挂起（后端半开/卡死），
-  // sending 会永久卡在 true、输入框被禁用。强制超时断开，保证状态能复位。
+  // 内部 controller 统一控制连接生命周期；外部“停止”信号与超时都转接到它。
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 180_000)
+
+  let externalAborted = false
+  if (signal) {
+    if (signal.aborted) {
+      externalAborted = true
+      controller.abort()
+    } else {
+      signal.addEventListener('abort', () => {
+        externalAborted = true
+        controller.abort()
+      })
+    }
+  }
 
   let reader = null
   try {
@@ -49,7 +63,22 @@ export async function fetchSseChat(message, chatId, { onChunk, onDone, onError }
       const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw
       if (!line.startsWith('data:')) return
       const data = line.slice(5).trimStart()
-      if (data && onChunk) onChunk(data)
+      if (!data || !onChunk) return
+      // 后端推送结构化事件 {"type":"tool|answer","content":"..."}：
+      // tool=工具执行过程（前端折叠展示），answer=面向用户的最终回答。
+      // 兼容纯文本/非 JSON 的旧格式，一律按最终回答处理。
+      if (data.startsWith('{')) {
+        try {
+          const evt = JSON.parse(data)
+          if (evt && typeof evt.content === 'string') {
+            onChunk({ type: evt.type === 'tool' ? 'tool' : 'answer', content: evt.content })
+            return
+          }
+        } catch (_) {
+          /* 解析失败则按纯文本处理 */
+        }
+      }
+      onChunk({ type: 'answer', content: data })
     }
 
     while (true) {
@@ -69,6 +98,11 @@ export async function fetchSseChat(message, chatId, { onChunk, onDone, onError }
 
     if (onDone) onDone()
   } catch (e) {
+    // 用户主动“停止生成”：走 onAbort，不弹错误
+    if (e && e.name === 'AbortError' && externalAborted) {
+      if (onAbort) onAbort()
+      return
+    }
     const reason = e && e.name === 'AbortError'
       ? '请求超时（超过 180 秒无响应），请重试'
       : (e && e.message) || String(e)

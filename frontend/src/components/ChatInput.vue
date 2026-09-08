@@ -4,7 +4,7 @@ import { ref, nextTick } from 'vue'
 defineProps({
   sending: { type: Boolean, default: false }
 })
-const emit = defineEmits(['submit'])
+const emit = defineEmits(['submit', 'stop'])
 
 const text = ref('')
 const ta = ref(null)
@@ -54,8 +54,19 @@ function onKeydown(e) {
         @blur="focused = false"
       ></textarea>
       <button
+        v-if="sending"
+        class="stop-btn"
+        title="停止生成"
+        @click="$emit('stop')"
+      >
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+          <rect x="6" y="6" width="12" height="12" rx="2" />
+        </svg>
+      </button>
+      <button
+        v-else
         class="send-btn"
-        :disabled="sending || !text.trim()"
+        :disabled="!text.trim()"
         title="发送"
         @click="onSubmit"
       >
@@ -76,7 +87,7 @@ function onKeydown(e) {
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  padding: 10px 10px 10px 20px;
+  padding: 8px 12px 8px 18px;
   background: #fff;
   border: 1.5px solid var(--border);
   border-radius: 24px;
@@ -94,10 +105,10 @@ textarea {
   border: none;
   outline: none;
   resize: none;
-  font-size: 15px;
+  font-size: 14.5px;
   line-height: 1.6;
   max-height: 160px;
-  padding: 6px 0;
+  padding: 4px 0;
   background: transparent;
 }
 textarea::placeholder {
@@ -126,5 +137,24 @@ textarea::placeholder {
 .send-btn:not(:disabled):hover {
   transform: translateY(-1px);
   box-shadow: 0 8px 18px rgba(47, 107, 255, 0.4);
+}
+
+/* 停止生成按钮：同位置替换发送键，红色方形表达“中断”语义 */
+.stop-btn {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  background: linear-gradient(135deg, #f0556a, var(--danger));
+  box-shadow: 0 6px 14px rgba(239, 68, 68, 0.32);
+  transition: all var(--transition);
+}
+.stop-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(239, 68, 68, 0.42);
 }
 </style>

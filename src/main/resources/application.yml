@@ -19,7 +19,10 @@ spring:
         sse:
           connections:
             fox-image-search:
-              url: http://localhost:8127
+              # 本地默认连 localhost:8127；线上部署用启动参数或环境变量覆盖，例如：
+              #   java -jar app.jar --MCP_IMAGE_SEARCH_URL=http://内网IP:8127
+              #   或 export MCP_IMAGE_SEARCH_URL=http://内网IP:8127
+              url: ${MCP_IMAGE_SEARCH_URL:http://localhost:8127}
 #        stdio:
 #          connections:
 #            fox-image-search:

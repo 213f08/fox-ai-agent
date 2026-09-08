@@ -19,7 +19,7 @@ const store = useChatStore()
       </button>
 
       <div class="logo">
-        <span class="logo-mark">F</span>
+        <img class="logo-mark" src="/logo-fox.png" alt="Fox AI" />
         <span class="logo-text">Fox AI</span>
       </div>
     </div>
@@ -80,14 +80,9 @@ const store = useChatStore()
 .logo-mark {
   width: 30px;
   height: 30px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9px;
-  color: #fff;
-  font-weight: 700;
-  font-size: 17px;
-  background: linear-gradient(135deg, var(--primary-3), var(--primary-2));
+  border-radius: 50%;
+  object-fit: cover;
+  background: transparent;
   box-shadow: 0 4px 12px rgba(47, 107, 255, 0.32);
 }
 

@@ -27,11 +27,14 @@ public  class FoxManus extends ToolCallAgent{
                 Decide whether tools are actually needed for the user's request:
                 - For simple conversations, greetings, or general knowledge questions, answer directly in natural language WITHOUT calling any tool.
                 - Only call tools when the task truly requires them (web search, scraping, PDF generation, image search, etc.).
-                - When you do use tools, explain the results clearly and continue until the task is complete.
-                - When the task is done, give the user a final natural-language answer, then call the `terminate` tool to end.
+                - When you do use tools, examine the results and continue until the task is complete.
+                - Do NOT call the same kind of tool more than twice, and never search repeatedly for more of the same thing.
+                - IMPORTANT: as soon as you have enough information, stop calling tools and write your final answer in natural language, then call `terminate`. Never call `terminate` without giving the answer first.
                 """;
         this.setNextStepPrompt(NEXT_STEP_PROMPT);
-        setMaxSteps(20);
+        // 步数上限：过大会让模型反复调用同类工具（如连续多次搜索），
+        // 单次对话耗时几分钟、用户体验差；8 步足够覆盖"搜索→抓取→生成"类任务。
+        setMaxSteps(8);
 //        初始化AI对话客户端
         ChatClient chatClient=ChatClient.builder(dashscopeChatModel)
                 .defaultAdvisors(new MyLoggerAdvisor())

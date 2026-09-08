@@ -19,7 +19,15 @@ function sanitizeSessions(arr) {
     .map((s, i) => ({
       id: typeof s.id === 'string' && s.id ? s.id : makeId(),
       title: typeof s.title === 'string' && s.title ? s.title : NEW_TITLE,
-      messages: Array.isArray(s.messages) ? s.messages : [],
+      // 旧数据没有 steps 字段，补空数组，保证折叠面板能正常渲染
+      messages: Array.isArray(s.messages)
+          ? s.messages.map((m) => ({
+              ...m,
+              // 旧数据缺 steps / ts 时补齐，保证流式收尾与按天分组逻辑不报错
+              steps: Array.isArray(m.steps) ? m.steps : [],
+              ts: typeof m.ts === 'number' ? m.ts : (typeof s.createdAt === 'number' ? s.createdAt : now - i)
+            }))
+          : [],
       createdAt: typeof s.createdAt === 'number' ? s.createdAt : now - i
     }))
 }
@@ -69,7 +77,9 @@ export function useChatStore() {
     sessions: initialSessions,
     // 有历史会话时自动激活最近一个，避免刷新后误以为“数据丢了”回到欢迎页
     activeId: initialSessions.length ? initialSessions[0].id : '',
-    sending: false
+    sending: false,
+    // 当前流式请求的 AbortController 句柄；点击“停止生成”时调用 abort() 切断连接
+    abortController: null
   })
 
   function createSession() {
@@ -123,24 +133,40 @@ export function useChatStore() {
     }
 
     setTitleIfEmpty(session.id, text)
-    session.messages.push({ role: 'user', content: text })
+    session.messages.push({ role: 'user', content: text, ts: Date.now() })
 
-    // 必须用 reactive 包裹：assistantMsg.content 在流式期间被多次修改，
-    // 若用普通对象，修改不会触发 Vue 依赖更新，导致 UI 不显示 AI 回复内容
-    const assistantMsg = reactive({ role: 'assistant', content: '' })
+    // 必须用 reactive 包裹：assistantMsg 在流式期间被多次修改，
+    // 若用普通对象，修改不会触发 Vue 依赖更新，导致 UI 不显示 AI 回复内容。
+    // content = 面向用户的最终回答；steps = 工具执行过程（前端折叠展示）
+    const assistantMsg = reactive({ role: 'assistant', content: '', steps: [], ts: Date.now() })
     session.messages.push(assistantMsg)
 
     state.sending = true
+    // 为本次请求创建 AbortController，供“停止生成”调用
+    const ac = new AbortController()
+    state.abortController = ac
     persist(state.sessions)
 
     try {
       await fetchSseChat(text, session.id, {
+        signal: ac.signal,
         onChunk: (chunk) => {
-          assistantMsg.content += (assistantMsg.content ? '\n' : '') + chunk
+          if (chunk.type === 'tool') {
+            // 工具执行过程单独收集，不混入最终回答
+            assistantMsg.steps.push(chunk.content)
+          } else {
+            assistantMsg.content += (assistantMsg.content ? '\n' : '') + chunk.content
+          }
           persistSoon(state.sessions)
         },
         onDone: () => {
           if (!assistantMsg.content) assistantMsg.content = '（未收到有效回复）'
+        },
+        onAbort: () => {
+          // 用户主动停止：若尚无任何内容，给一个占位提示，避免留白
+          if (!assistantMsg.content && !assistantMsg.steps.length) {
+            assistantMsg.content = '（已停止生成）'
+          }
         },
         onError: (e) => {
           if (!assistantMsg.content) {
@@ -150,6 +176,7 @@ export function useChatStore() {
       })
     } finally {
       state.sending = false
+      state.abortController = null
       // 收口：清掉未触发的防抖定时器并立即落盘
       if (persistTimer) {
         clearTimeout(persistTimer)
@@ -159,13 +186,95 @@ export function useChatStore() {
     }
   }
 
+  /** 主动终止当前流式生成（输入框“停止”按钮调用） */
+  function stop() {
+    if (!state.sending || !state.abortController) return
+    state.abortController.abort()
+    // finally 块会负责把 sending 复位并落盘
+  }
+
+  /**
+   * 撤回消息：删除指定索引的消息，并在原位插入一条“已撤回”内联提示（含原文），
+   * 数据留在消息列表里而非主输入框；需要继续修改时点击提示上的“重新编辑”再回填。
+   * - 撤回用户消息时，其后的 AI 回复一并移除（避免“回答悬空”）。
+   * - 流式生成中禁止撤回，防止破坏进行中的消息结构。
+   */
+  function recall(messageIndex) {
+    if (state.sending) return
+    const s = activeSession.value
+    if (!s) return
+    const msgs = s.messages
+    if (messageIndex < 0 || messageIndex >= msgs.length) return
+
+    const target = msgs[messageIndex]
+    const recalledText = target.content || ''
+    // 用户消息后若紧跟 AI 回复，一并移除
+    let removeCount = 1
+    if (target.role === 'user' && msgs[messageIndex + 1] && msgs[messageIndex + 1].role === 'assistant') {
+      removeCount = 2
+    }
+    msgs.splice(messageIndex, removeCount)
+    // 在原位插入“已撤回”内联提示，保留撤回前的原文
+    msgs.splice(messageIndex, 0, {
+      role: 'recalled',
+      content: recalledText,
+      steps: [],
+      ts: Date.now()
+    })
+    persist(state.sessions)
+  }
+
+  /** 点击“重新编辑”：把已撤回条目就地变成一条右对齐的可编辑行（reedit），原文作为初始内容 */
+  function startReEdit(messageIndex) {
+    if (state.sending) return
+    const s = activeSession.value
+    if (!s) return
+    const msgs = s.messages
+    if (messageIndex < 0 || messageIndex >= msgs.length) return
+    if (msgs[messageIndex].role !== 'recalled') return
+    const content = msgs[messageIndex].content
+    msgs.splice(messageIndex, 1, { role: 'reedit', content, steps: [], ts: Date.now() })
+    persist(state.sessions)
+  }
+
+  /** 确认重新编辑：移除可编辑行，把修改后的文本作为新消息（追加到会话末尾）发送 */
+  function submitReEdit(messageIndex, text) {
+    if (state.sending) return
+    const s = activeSession.value
+    if (!s) return
+    const msgs = s.messages
+    if (messageIndex < 0 || messageIndex >= msgs.length) return
+    if (msgs[messageIndex].role !== 'reedit') return
+    msgs.splice(messageIndex, 1)
+    persist(state.sessions)
+    send(text)
+  }
+
+  /** 取消重新编辑：可编辑行还原为“已撤回”提示 */
+  function cancelReEdit(messageIndex) {
+    if (state.sending) return
+    const s = activeSession.value
+    if (!s) return
+    const msgs = s.messages
+    if (messageIndex < 0 || messageIndex >= msgs.length) return
+    if (msgs[messageIndex].role !== 'reedit') return
+    const content = msgs[messageIndex].content
+    msgs.splice(messageIndex, 1, { role: 'recalled', content, steps: [], ts: Date.now() })
+    persist(state.sessions)
+  }
+
   singleton = {
     state,
     activeSession,
     createSession,
     removeSession,
     activate,
-    send
+    send,
+    stop,
+    recall,
+    startReEdit,
+    submitReEdit,
+    cancelReEdit
   }
   return singleton
 }

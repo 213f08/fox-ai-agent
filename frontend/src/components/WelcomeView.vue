@@ -40,7 +40,7 @@ function send(text) {
   <div class="welcome">
     <div class="hero">
       <img class="brand-logo" src="/logo-fox.png" alt="Fox AI 智能体" />
-      <h1 class="brand-title brand-gradient">Fox AI 智能体百宝箱</h1>
+      <h1 class="brand-title brand-gradient">Fox AI智能体</h1>
       <p class="brand-sub">一个框，解决你的搜索、抓取、报告与图片需求</p>
 
       <div class="prompt-grid">

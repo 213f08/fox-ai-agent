@@ -50,7 +50,7 @@ function fmtTime(ts) {
       </div>
 
       <div class="sidebar-footer">
-        <p class="brand">Fox AI · 智能体百宝箱</p>
+        <p class="brand">Fox AI智能体</p>
       </div>
     </div>
   </aside>

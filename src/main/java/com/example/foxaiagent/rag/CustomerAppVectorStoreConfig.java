@@ -8,9 +8,11 @@ import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
+import org.springframework.core.io.ClassPathResource;
 
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 
 /**
@@ -18,16 +20,16 @@ import java.util.List;
  *
  *   使用内存版 SimpleVectorStore（由 DashScope EmbeddingModel 做向量化）</li>
  *   启动时优先从本地缓存文件加载（跳过重复向量化，秒启）</li>
- *   缓存不存在时自动加载 classpath:document/*.md 入库，并落盘缓存</li>
- *   文档更新后需删除缓存文件 tmp/vector-store.json 才会重新向量化</li>
+ *   缓存不存在时从 classpath 兜底（src/main/resources/vector-store.json，随部署包分发）</li>
+ *   两者都无才首次向量化 document/*.md 并落盘缓存</li>
  *
- * <p>仅本地开发启用（@Profile("!prod")）：
- * 无缓存首次启动会对 43 个文档片段逐条调 embedding + 关键词增强 API，耗时数分钟，
- * 且云托管每次部署都是全新容器、没有缓存，会拖垮启动导致存活探针失败。
- * 生产 RAG 走百炼云端知识库（CustomerAppCloudAdvisorConfig），用不到这个本地向量库。</p>
+ * <p>local 与 prod 都启用：
+ * 生产部署包内置了预构建缓存（vector-store.json），云端启动直接 load，秒级完成，
+ * 不会触发"逐片段调 embedding/关键词增强"的慢路径（那会拖垮容器存活探针）。
+ * 文档内容更新后：本地删 tmp/vector-store.json 重启重建缓存，
+ * 再覆盖 src/main/resources/vector-store.json 并提交，新部署包即携带新知识。</p>
  */
 @Configuration
-@Profile("!prod")
 @Slf4j
 public class CustomerAppVectorStoreConfig {
     @Resource
@@ -39,17 +41,27 @@ public class CustomerAppVectorStoreConfig {
     private static final File CACHE_FILE =
             new File(System.getProperty("user.dir") + "/tmp", "vector-store.json");
 
+    /**
+     * classpath 兜底缓存：随 jar/镜像分发的预构建向量库，
+     * 保证云端新容器"零 API 调用、零长启动"即可用上 RAG。
+     */
+    private static final String CLASSPATH_CACHE = "vector-store.json";
+
     @Bean
     public VectorStore customerAppVectorStore(EmbeddingModel embeddingModel, CustomerAppDocumentLoader documentLoader) {
         SimpleVectorStore vectorStore = SimpleVectorStore.builder(embeddingModel).build();
 
-        // ===== ① 有缓存：直接加载，跳过全部 embedding API 调用 =====
+        // ===== ① 本地缓存不存在时，尝试从 classpath 兜底缓存恢复 =====
+        if (!CACHE_FILE.exists()) {
+            prepareClasspathCache();
+        }
+        // ===== ② 有缓存：直接加载，跳过全部 embedding API 调用 =====
         if (CACHE_FILE.exists()) {
             try {
                 vectorStore.load(CACHE_FILE);
                 long kb = CACHE_FILE.length() / 1024;
                 int chunks = countCacheChunks();
-                log.info("[RAG] 从本地缓存加载向量库：{}（跳过向量化，{} 个片段，缓存 {} KB）",
+                log.info("[RAG] 从缓存加载向量库：{}（跳过向量化，{} 个片段，缓存 {} KB）",
                         CACHE_FILE.getPath(), chunks >= 0 ? chunks : "未知", kb);
                 return vectorStore;
             } catch (Exception e) {
@@ -57,7 +69,7 @@ public class CustomerAppVectorStoreConfig {
             }
         }
 
-        // ===== ② 无缓存（首次启动）：加载文档 → 增强 → 入库 → 落盘 =====
+        // ===== ③ 无任何缓存（首次启动）：加载文档 → 增强 → 入库 → 落盘 =====
         List<Document> documents = documentLoader.loadMarkdowns();
         log.info("[RAG] 首次启动：加载到 {} 份知识文档，开始写入向量库...", documents.size());
         //效果不好，所以注释，仅学习
@@ -91,6 +103,30 @@ public class CustomerAppVectorStoreConfig {
     }
 
     /**
+     * 把 classpath 内的预构建缓存（vector-store.json）复制到 tmp，
+     * 让云端新容器无需向量化即可秒载知识库。失败仅告警，不阻断启动。
+     */
+    private void prepareClasspathCache() {
+        try {
+            ClassPathResource resource = new ClassPathResource(CLASSPATH_CACHE);
+            if (!resource.exists()) {
+                log.info("[RAG] classpath 无兜底缓存（{}），本地也没有 → 将执行首次向量化", CLASSPATH_CACHE);
+                return;
+            }
+            File tmpDir = CACHE_FILE.getParentFile();
+            if (tmpDir != null && !tmpDir.exists() && !tmpDir.mkdirs()) {
+                log.warn("[RAG] 缓存目录创建失败：{}", tmpDir.getAbsolutePath());
+                return;
+            }
+            Files.copy(resource.getInputStream(), CACHE_FILE.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            log.info("[RAG] 已从 classpath 恢复预构建缓存到 {}（{} KB）",
+                    CACHE_FILE.getPath(), CACHE_FILE.length() / 1024);
+        } catch (Exception e) {
+            log.warn("[RAG] 从 classpath 恢复缓存失败：{}", e.getMessage());
+        }
+    }
+
+    /**
      * 统计缓存文件里的文档片段数（顶层 JSON 每个 key = 一个片段）
      * 拿不到时返回 -1，日志里显示兜底文案
      */
@@ -103,3 +139,4 @@ public class CustomerAppVectorStoreConfig {
         }
     }
 }
+

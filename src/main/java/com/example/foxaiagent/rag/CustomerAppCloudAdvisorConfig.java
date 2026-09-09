@@ -10,6 +10,7 @@ import org.springframework.ai.rag.retrieval.search.DocumentRetriever;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 
 /**
  * 云知识库（百炼）检索增强顾问配置
@@ -18,13 +19,17 @@ import org.springframework.context.annotation.Configuration;
  * <ul>
  *   <li>new DashScopeApi(apiKey)  →  DashScopeApi.builder().apiKey(apiKey).build()
  *       （spring-ai-alibaba 1.1.2.0 移除了单参构造器，只保留 Builder）</li>
- *   <li>知识库名称抽成配置项 customer-app.knowledge-index，默认「麻瓜优选客服知识库」</li>
+ *   <li>知识库名称抽成配置项 customer-app.knowledge-index</li>
  * </ul>
  * 与内存向量库版（CustomerAppVectorStoreConfig）的区别：
  * 内存版 = 检索本地 SimpleVectorStore；本类 = 调用阿里云百炼云知识库检索 API。
- * 使用前提：先在百炼控制台创建同名知识库并上传文档（用名称，不是 ID）。
+ *
+ * <p>当前产品只使用【本地知识库 RAG】（饮食健康助手 diet 接口走
+ * QuestionAnswerAdvisor + customerAppVectorStore），不再使用百炼云端知识库，
+ * 因此本配置类仅保留作学习对照，并限制在非 prod 激活（云端部署不装配云 RAG）。</p>
  */
 @Configuration
+@Profile("!prod")
 @Slf4j
 public class CustomerAppCloudAdvisorConfig {
 

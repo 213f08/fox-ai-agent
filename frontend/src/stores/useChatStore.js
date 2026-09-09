@@ -24,7 +24,8 @@ export const MODES = {
     key: 'diet',
     name: '饮食健康·小养',
     short: '小养',
-    endpoint: '/api/ai/customer_app/chat/sse',
+    // 本地 RAG 检索增强版流式问答（本地无向量库时后端自动退化为纯对话，云端也可用）
+    endpoint: '/api/ai/diet/chat/sse',
     placeholder: '问问小养：减脂怎么吃、控糖水果怎么选、痛风能吃什么…',
     welcomeTitle: '小养 · 饮食健康助手',
     welcomeSub: '减脂增肌 / 控糖 / 慢病膳食 / 营养科普，把一日三餐吃得更健康'

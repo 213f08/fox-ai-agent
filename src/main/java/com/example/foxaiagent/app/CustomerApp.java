@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
@@ -193,6 +194,33 @@ public class CustomerApp {
         String content = chatResponse.getResult().getOutput().getText();
         log.info("content: {}", content);
         return content;
+    }
+
+    /**
+     * 饮食健康助手「小养」的流式问答（SSE）：
+     * - 本地开发（local）：基于本地饮食健康知识库做 RAG 检索增强（QueryRewrite + QuestionAnswerAdvisor）
+     * - 生产（prod）：本地向量库不存在（@Profile("!prod")），自动退化为纯对话流式，不报错
+     *
+     * 前端 diet 模式走该接口：GET /api/ai/diet/chat/sse?message=&chatId=
+     */
+    public Flux<String> doDietRagChatStream(String message, String chatId) {
+        if (customerAppVectorStore != null) {
+            // 查询重写（把口语化问题改写成适合检索的表述），再走本地知识库检索增强
+            String rewritten = queryRewriter.doQueryRewriter(message);
+            log.info("[小养RAG] 查询重写：{} → {}", message, rewritten);
+            return chatClient.prompt()
+                    .user(rewritten)
+                    .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
+                    .advisors(QuestionAnswerAdvisor.builder(customerAppVectorStore).build())
+                    .stream()
+                    .content();
+        }
+        // 生产无本地向量库：纯对话流式（与 /customer_app/chat/sse 等价）
+        return chatClient.prompt()
+                .user(message)
+                .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
+                .stream()
+                .content();
     }
     @Resource
     private ToolCallback[] allTools;

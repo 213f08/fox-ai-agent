@@ -59,4 +59,16 @@ public class AiController {
                         .data(chunk)
                         .build());
     }
+
+    /**
+     * 饮食健康助手「小养」流式问答（带本地 RAG 检索增强；无本地向量库时自动退化为纯对话）
+     * GET /ai/diet/chat/sse?message=减脂期晚上能吃主食吗&chatId=test
+     */
+    @GetMapping(value = "/diet/chat/sse", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> doDietChatSSE(@RequestParam String message, @RequestParam String chatId) {
+        return customerApp.doDietRagChatStream(message, chatId)
+                .map(chunk -> ServerSentEvent.<String>builder()
+                        .data(chunk)
+                        .build());
+    }
 }

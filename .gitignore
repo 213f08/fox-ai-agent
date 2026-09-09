@@ -36,7 +36,6 @@ build/
 
 ### 本地配置（含 API Key 等敏感信息，禁止提交） ###
 application-local*.yml
-TestApiKey.java
 mcp-servers.json
 tmp/
 

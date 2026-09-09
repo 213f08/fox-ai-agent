@@ -72,14 +72,15 @@ export async function fetchSseChat(message, chatId, {
       if (!line.startsWith('data:')) return
       const data = line.slice(5).trimStart()
       if (!data || !onChunk) return
-      // 后端推送结构化事件 {"type":"tool|answer","content":"..."}：
-      // tool=工具执行过程（前端折叠展示），answer=面向用户的最终回答。
+      // 后端推送结构化事件 {"type":"tool|rag|answer","content":"..."}：
+      // tool=工具执行过程(折叠)，rag=知识库检索命中(折叠，小养思考过程)，answer=最终回答。
       // 兼容纯文本/非 JSON 的旧格式，一律按最终回答处理。
       if (data.startsWith('{')) {
         try {
           const evt = JSON.parse(data)
           if (evt && typeof evt.content === 'string') {
-            onChunk({ type: evt.type === 'tool' ? 'tool' : 'answer', content: evt.content })
+            const t = evt.type === 'tool' || evt.type === 'rag' ? evt.type : 'answer'
+            onChunk({ type: t, content: evt.content })
             return
           }
         } catch (_) {

@@ -223,8 +223,9 @@ export function useChatStore() {
         endpoint: (MODES[session.kind] || MODES.manus).endpoint,
         signal: ac.signal,
         onChunk: (chunk) => {
-          if (chunk.type === 'tool') {
-            // 工具执行过程单独收集，不混入最终回答
+          if (chunk.type !== 'answer') {
+            // 过程类事件：全能助手的 tool=工具执行，小养的 rag=知识库检索命中；
+            // 统一收进 steps 折叠区，不混入最终回答
             assistantMsg.steps.push(chunk.content)
           } else {
             // 后端已是 token 级流式：片段直接拼接，不能再在片段之间插换行，

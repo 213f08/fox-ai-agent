@@ -1,10 +1,12 @@
 package com.example.foxaiagent.app;
 
+import cn.hutool.json.JSONUtil;
 import com.example.foxaiagent.advisor.MyLoggerAdvisor;
 import com.example.foxaiagent.chatmemory.FileBaseChatMemory;
 import com.example.foxaiagent.rag.QueryRewriter;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.document.Document;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,11 +18,15 @@ import org.springframework.ai.chat.client.advisor.api.Advisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 饮食健康助手 App（Spring AI 1.1.2 标准写法）
@@ -208,19 +214,53 @@ public class CustomerApp {
             // 查询重写（把口语化问题改写成适合检索的表述），再走本地知识库检索增强
             String rewritten = queryRewriter.doQueryRewriter(message);
             log.info("[小养RAG] 查询重写：{} → {}", message, rewritten);
-            return chatClient.prompt()
+
+            // ① 检索本地知识库，把命中结果作为「可见过程」先推给前端（type=rag）
+            List<Document> docs = customerAppVectorStore.similaritySearch(
+                    SearchRequest.builder().query(rewritten).topK(4).build());
+            List<String> ragEvents = new ArrayList<>();
+            StringBuilder context = new StringBuilder();
+            int idx = 0;
+            for (Document doc : docs) {
+                idx++;
+                String filename = String.valueOf(doc.getMetadata().getOrDefault("filename", "饮食知识"));
+                String snippet = doc.getText() == null ? "" : doc.getText();
+                if (snippet.length() > 160) snippet = snippet.substring(0, 160) + "…";
+                ragEvents.add(streamEvent("rag", "📄 " + filename.replace(".md", "") + "\n" + snippet));
+                context.append("【资料").append(idx).append("｜").append(filename).append("】\n").append(doc.getText()).append("\n\n");
+            }
+            log.info("[小养RAG] 检索命中 {} 篇知识库文档", docs.size());
+
+            // ② 参考资料拼进 system（保留小养人设，QA 内容优先于模型先验知识），正文流式返回
+            Flux<String> answer = chatClient.prompt()
+                    .system(SYSTEM_PROMPT
+                            + "\n\n【本地知识库检索到的参考资料，请优先依据资料回答，资料不足时再结合你的知识并说明】\n"
+                            + context)
                     .user(rewritten)
                     .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
-                    .advisors(QuestionAnswerAdvisor.builder(customerAppVectorStore).build())
                     .stream()
-                    .content();
+                    .content()
+                    .map(token -> streamEvent("answer", token));
+            return Flux.concat(Flux.fromIterable(ragEvents), answer);
         }
-        // 生产无本地向量库：纯对话流式（与 /customer_app/chat/sse 等价）
+        // 生产无本地向量库：纯对话流式（JSON 事件包装，前端解析一致）
         return chatClient.prompt()
                 .user(message)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
                 .stream()
-                .content();
+                .content()
+                .map(token -> streamEvent("answer", token));
+    }
+
+    /**
+     * 组装流式事件 JSON：{"type":"rag|answer","content":"..."}，前端据此区分
+     * 「参考的知识库过程」与「最终回答」。
+     */
+    private static String streamEvent(String type, String content) {
+        Map<String, String> event = new HashMap<>();
+        event.put("type", type);
+        event.put("content", content);
+        return JSONUtil.toJsonStr(event);
     }
     @Resource
     private ToolCallback[] allTools;

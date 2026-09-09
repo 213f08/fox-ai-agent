@@ -114,13 +114,13 @@ function cancelEdit() {
           </button>
         </div>
 
-        <!-- 工具执行过程：默认折叠，避免工具返回的原始 JSON 刷屏 -->
+        <!-- 过程步骤（工具执行 / RAG 知识库检索）：默认折叠，避免刷屏 -->
         <div v-if="steps.length" class="steps">
           <button class="steps-toggle" @click="stepsOpen = !stepsOpen">
             <span v-if="thinking" class="spinner"></span>
             <span v-else class="steps-check">✓</span>
             <span class="steps-text">
-              {{ thinking ? '思考中…' : `已执行 ${steps.length} 个工具步骤` }}
+              {{ thinking ? '思考中…' : `完成 ${steps.length} 个过程步骤` }}
             </span>
             <span class="steps-arrow" :class="{ open: stepsOpen }">▾</span>
           </button>

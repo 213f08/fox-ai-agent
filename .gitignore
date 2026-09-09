@@ -40,6 +40,11 @@ TestApiKey.java
 mcp-servers.json
 tmp/
 
+### 部署密钥文件（模板 .env.example 可提交，真实 .env 禁止提交） ###
+.env
+*.env
+!.env.example
+
 ### WorkBuddy 项目数据（含个人隐私，禁止提交） ###
 .workbuddy/
 

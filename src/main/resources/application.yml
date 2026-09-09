@@ -2,39 +2,25 @@ spring:
   application:
     name: Fox-ai-agent
   profiles:
-    active: local # 默认启用 local 配置
+    # 开发默认 local（密钥在 application-local.yml，已 gitignore）；
+    # 部署时通过环境变量 SPRING_PROFILES_ACTIVE=prod 切换（见 application-prod.yml 与 .env.example）
+    active: ${SPRING_PROFILES_ACTIVE:local}
   ai:
     mcp:
       client:
-        # 高德地图 MCP（当前不可用：INVALID_USER_KEY 10001，且会拖崩应用启动，先注释保命）
-        # 接入前确认：在高德 lbs.amap.com/api/mcp-server 申请 MCP 专用 key（不是普通 Web 服务 key），并开通对应服务
+        # 图片搜索 MCP 连接已按环境拆分：
+        #   - 本地开发（local profile）→ application-local.yml 的 sse.connections（连 localhost:8127）
+        #   - 生产（prod profile）→ 默认【不连 MCP】：云托管 / FC 等单容器环境没有 MCP 服务时
+        #     可直接启动；需要图片搜索时取消 application-prod.yml 里 MCP 段的注释。
+        # 注意：MCP client 同步握手超时(20s)会拖崩整个应用启动 ——
+        # 没部署 MCP 服务的环境千万不要在这里配 connections。
+        # 属性结构见 spring-ai-autoconfigure-mcp-client-common 1.1.2 的 McpSseClientProperties：
+        # CONFIG_PREFIX=spring.ai.mcp.client.sse，Map<String, SseParameters> connections（复数 connections，写单数会被静默忽略）
+        # 高德 MCP 见下方注释（当前不可用：INVALID_USER_KEY 10001）
         # streamable-http:
         #   connections:
         #     amap-maps:
         #       url: https://mcp.amap.com/mcp?key=${amap.api-key}
-        # Pexels 图片搜索 MCP Server：SSE 方式连接本地 fox（fox-image-search-mcp-server，端口 8127）
-        # 注意：fox 端必须用 spring-ai-starter-mcp-server-webmvc（纯 stdio starter 不注册 /sse）。
-        # 属性结构见 spring-ai-autoconfigure-mcp-client-common 1.1.2 的 McpSseClientProperties：
-        # CONFIG_PREFIX=spring.ai.mcp.client.sse，Map<String, SseParameters> connections（复数 connections，写单数会被静默忽略）
-        sse:
-          connections:
-            fox-image-search:
-              # 本地默认连 localhost:8127；线上部署用启动参数或环境变量覆盖，例如：
-              #   java -jar app.jar --MCP_IMAGE_SEARCH_URL=http://内网IP:8127
-              #   或 export MCP_IMAGE_SEARCH_URL=http://内网IP:8127
-              url: ${MCP_IMAGE_SEARCH_URL:http://localhost:8127}
-#        stdio:
-#          connections:
-#            fox-image-search:
-#              command: java
-#              args:
-#                - "-Dspring.ai.mcp.server.stdio=true"
-#                - "-Dspring.main.web-application-type=none"
-#                - "-jar"
-#                - "E:/Code/Java/Fox-ai-agent/fox-image-search-mcp-server/target/fox-image-search-mcp-server-0.0.1-SNAPSHOT.jar"
-#                - "--spring.profiles.active=stdio"
-#              env:
-#                PEXELS_API_KEY: ${pexels.api-key:}
     vectorstore:
       pgvector:
         index-type: HNSW

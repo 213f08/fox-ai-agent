@@ -1,0 +1,12 @@
+# Docker 构建上下文排除：减小上传体积、避免把本地密钥/产物带进镜像
+.git
+target
+tmp
+**/target
+**/tmp
+frontend/node_modules
+frontend/dist
+.workbuddy
+.idea
+*.log
+.env

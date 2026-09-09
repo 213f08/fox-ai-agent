@@ -1,0 +1,69 @@
+# ============================================================
+# 生产环境配置（application-prod.yml）
+# ------------------------------------------------------------
+# 本文件【不含任何真实密钥，可安全提交到 git】。
+# 所有敏感值一律从环境变量注入，部署前按下表在部署平台配置：
+#
+#   SPRING_PROFILES_ACTIVE  固定为 prod（或启动时 --spring.profiles.active=prod）
+#   FOX_DASHSCOPE_API_KEY   必填 | 阿里云百炼 API Key（https://dashscope.aliyun.com/apiKey）
+#   FOX_CHAT_MODEL          选填 | 默认 kimi-k2.7-code
+#   FOX_MULTI_MODEL         true=走多模态接口(kimi/qwen3.8 等)；false=文本接口(glm-5.2 等)，默认 true
+#   FOX_SEARCH_API_KEY      选填 | WebSearchTool 的搜索 API Key（本地是 search-api.api-key）
+#   FOX_PG_URL / FOX_PG_USERNAME / FOX_PG_PASSWORD
+#                           选填 | PostgreSQL 连接（见下方 datasource 说明，默认不连库）
+#   FOX_AMAP_API_KEY        选填 | 高德 MCP Key（未启用可留空）
+#
+# 微信云托管 / 单容器部署要点：
+#   1. 生产默认【不连接图片搜索 MCP】，没有 MCP 服务也能直接启动（见下方 MCP 段注释）；
+#      图片搜索（Pexels）功能会缺失，其余对话 / 联网搜索工具不受影响。
+#   2. 端口用启动参数指定：--server.port=80（云托管要求容器监听 80）。
+#   3. 环境变量在云托管控制台配置：SPRING_PROFILES_ACTIVE=prod + 下表 FOX_* 各项。
+#   4. 健康检查路径填：/api/doc.html
+#
+# 启动命令示例：
+#   java -jar Fox-ai-agent-0.0.1-SNAPSHOT.jar \
+#        --spring.profiles.active=prod \
+#        --server.port=80
+# ============================================================
+spring:
+  ai:
+    dashscope:
+      api-key: ${FOX_DASHSCOPE_API_KEY}
+      chat:
+        options:
+          model: ${FOX_CHAT_MODEL:kimi-k2.7-code}
+          # kimi 系列必须 true（挂在多模态接口）；glm-5.2 等纯文本模型改 false
+          multi-model: ${FOX_MULTI_MODEL:true}
+    # ------------------------------------------------------------------
+    # 图片搜索 MCP：默认【不启用】。需要时取消注释，url 指向可访问的 MCP 服务
+    #（fox-image-search-mcp-server 需单独部署，sse profile，端口 8127）：
+    #   mcp:
+    #     client:
+    #       sse:
+    #         connections:
+    #           fox-image-search:
+    #             url: ${MCP_IMAGE_SEARCH_URL:http://localhost:8127}
+    # ------------------------------------------------------------------
+  # ------------------------------------------------------------------
+  # PostgreSQL 默认【不启用】：
+  #   classpath 里有 Hikari + PG 驱动，一旦提供 spring.datasource 就会自动建连接池，
+  #   服务器上若没有可连的库，启动会直接失败。
+  #   - 不需要数据库（对话走百炼云知识库 RAG）→ 保持现状即可，下面的 exclude 会跳过 DataSource
+  #   - 需要使用 PostgreSQL / pgvector → 删掉下面 autoconfigure.exclude，
+  #     并设置 FOX_PG_URL / FOX_PG_USERNAME / FOX_PG_PASSWORD（RDS 记得在控制台加白名单）
+  # ------------------------------------------------------------------
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+  # datasource:
+  #   url: ${FOX_PG_URL}
+  #   username: ${FOX_PG_USERNAME}
+  #   password: ${FOX_PG_PASSWORD}
+
+# 搜索 API（WebSearchTool / FoxManus 用）
+search-api:
+  api-key: ${FOX_SEARCH_API_KEY:}
+
+# 高德开放平台 MCP Key（当前未启用，仅保留注入位）
+amap:
+  api-key: ${FOX_AMAP_API_KEY:}

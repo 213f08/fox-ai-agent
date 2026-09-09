@@ -72,6 +72,16 @@
 
 	<build>
 		<plugins>
+			<!-- 部署包安全：禁止把 application-local*.yml（含 Pexels Key）打进 jar，与主项目保持一致 -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<configuration>
+					<excludes>
+						<exclude>application-local*.yml</exclude>
+					</excludes>
+				</configuration>
+			</plugin>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>

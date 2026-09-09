@@ -28,6 +28,10 @@
     </scm>
     <properties>
         <java.version>21</java.version>
+        <!-- 明确指定启动类：src/main/java 根目录下误放了一份 MCP 子项目的
+             FoxImageSearchMcpServerApplication（package 与目录不匹配），
+             不指定时 spring-boot:run / package 会因"候选主类不唯一"报错 -->
+        <start-class>com.example.foxaiagent.FoxAiAgentApplication</start-class>
     </properties>
     <dependencyManagement>
         <dependencies>
@@ -163,6 +167,18 @@
 
     <build>
         <plugins>
+            <!-- 部署包安全：禁止把 application-local*.yml（含真实密钥）打进 jar。
+                 jar 只携带 application.yml + application-prod.yml（全环境变量占位，无密钥）。
+                 本地开发不受影响：spring-boot:run / IDE 直接跑 target/classes，读得到 local。 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>application-local*.yml</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

@@ -4,13 +4,13 @@
 
 **一个 Spring AI 学习驱动的"智能体能力百宝箱"项目**
 
-每个 `App` 是一个独立能力槽位：客服对话 · RAG 检索 · 工具调用 · 服务报告 ……  
+每个 `App` 是一个独立能力槽位：饮食健康对话 · RAG 检索 · 工具调用 · 服务报告 ……  
 跟着鱼皮《AI 超级智能体实战》打底，在每个槽位里塞进真实业务场景练习。
 
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.10-brightgreen)](https://spring.io/projects/spring-boot)
 [![Java](https://img.shields.io/badge/Java-21-orange)](https://openjdk.org/projects/jdk/21/)
 [![Spring AI Alibaba](https://img.shields.io/badge/Spring%20AI%20Alibaba-1.1.2-blue)](https://github.com/alibaba/spring-ai-alibaba)
-[![DashScope](https://img.shields.io/badge/DashScope-qwen--plus-ff6a00)](https://help.aliyun.com/zh/model-studio)
+[![DashScope](https://img.shields.io/badge/ChatModel-kimi--k2.7--code-ff6a00)](https://help.aliyun.com/zh/model-studio)
 [![License](https://img.shields.io/badge/license-MIT-green)](#license)
 
 </div>
@@ -19,11 +19,12 @@
 
 ## 📖 项目定位
 
-> **不是**线上可用的客服系统，**是**用 Spring AI 把 AI 应用核心能力做一遍的学习型"百宝箱"。
+> **不是**线上可用的医疗咨询系统，**是**用 Spring AI 把 AI 应用核心能力做一遍的学习型"百宝箱"。
+> 当前主线应用是一个**饮食健康助手「小养」**（原「不烦」智能客服改造）：减脂 / 增肌 / 控糖 / 慢病膳食 / 营养科普，明确不诊断、不替代医嘱。
 
 - **每个 App 一个能力**：可独立 demo / 测试 / 拼装组合
-- **每个能力对应面试一个考点**：RAG / 工具调用 / 持久化 / 结构化输出 / 多 Agent
-- **可部署到 Serverless**：阿里云函数计算（FC）原生支持 Spring Boot Jar，一键上云
+- **每个能力对应面试一个考点**：RAG / 工具调用 / 持久化 / 结构化输出 / 多 Agent / 流式输出
+- **可部署到云**：微信云托管 / 阿里云函数计算（FC）/ 任意 Docker 环境（fat jar + Dockerfile）
 
 ---
 
@@ -31,14 +32,14 @@
 
 | App / 模块 | 能力 | 状态 | 入口 |
 |---|---|---|---|
-| `CustomerApp「不烦」` | 多轮对话 + 文件持久化记忆（Kryo 序列化） | ✅ 已完成 | `com.example.foxaiagent.app.CustomerApp` |
-| `CustomerApp` | RAG 知识库问答（文档检索增强） | ✅ 已完成 | `doChatWithRag` 方法 |
+| `CustomerApp「小养」` | 饮食健康对话（多轮 + Kryo 文件记忆 + token 级 SSE 流式） | ✅ 已完成 | `com.example.foxaiagent.app.CustomerApp` |
+| `CustomerApp` | 饮食健康 RAG 知识库问答（本地 document/*.md 或百炼云知识库） | ✅ 已完成 | `doChatWithRag` 方法 |
 | `CustomerApp` | 结构化输出（服务报告 JSON） | ✅ 已完成 | `doChatWithReport` 方法 |
-| `CustomerApp` | 自定义 Advisor（日志 / ReReading） | ✅ 已完成 | `com.example.foxaiagent.Advisor.*` |
-| `EchoTools` / `OrderTools` | 工具调用（Function Calling） | 📋 计划中 | `doChatWithTools` 方法（待加） |
-| `StreamingChatApp` | 流式输出（SSE） | 📋 计划中 | - |
+| `CustomerApp` | 自定义 Advisor（日志 / ReReading） | ✅ 已完成 | `com.example.foxaiagent.advisor.*` |
+| `FoxManus` | 全能智能体：ReAct 循环 + 工具调用 + MCP 图片搜索 + 流式输出 | ✅ 已完成 | `com.example.foxaiagent.agent.model.FoxManus` |
+| `StreamingChatApp` | 流式输出（SSE，token 级） | ✅ 已完成 | `/api/ai/customer_app/chat/sse` |
 | `MultimodalApp` | 多模态（图片理解） | 📋 计划中 | - |
-| `McpApp` | MCP 协议对接 | 📋 计划中 | - |
+| `McpApp` | MCP 协议对接（已落地图片搜索 MCP） | 🔶 部分完成 | `fox-image-search-mcp-server` |
 | `MultiAgentWorkflow` | 多 Agent 协作 | 📋 计划中 | - |
 
 ---
@@ -64,43 +65,51 @@ cd fox-ai-agent
 #      ai:
 #        dashscope:
 #          api-key: sk-你的真实key
+#    更多可选项（模型、搜索 key、MCP 地址）见 .env.example 与 application-prod.yml 顶部注释
 
-# 3. 启动（IDEA 里直接跑 FoxAiAgentApplication 也行）
+# 3. 启动主应用（IDEA 直接跑 FoxAiAgentApplication 也行）
+#    Windows 用户：mvnw 的 wrapper jar 未入库，直接双击 start-dev.cmd 最省事
 ./mvnw spring-boot:run
 
 # 4. 访问
 #    接口：http://localhost:8123/api
 #    文档：http://localhost:8123/api/doc.html（Knife4j）
+#    前端：http://localhost:5173（npm run dev，见 frontend/）
 ```
 
 ### 第一次调用
 
 ```bash
-# 多轮对话
-curl "http://localhost:8123/api/ai/chat?msg=你好&chatId=test1"
+# 饮食健康助手多轮对话（同步，带记忆：同一 chatId 共享上下文）
+curl "http://localhost:8123/api/ai/customer_app/chat/sync?message=减脂期晚上能吃主食吗&chatId=test1"
 
-# RAG 检索问答（依赖 knowledge-base 文档）
-curl "http://localhost:8123/api/ai/rag?msg=退货几天？&chatId=test2"
+# 同上，SSE 流式（token 级打字机效果）
+curl -N "http://localhost:8123/api/ai/customer_app/chat/sse?message=帮我配一份减脂晚餐&chatId=test2"
+
+# 全能智能体 FoxManus（ReAct + 工具调用 + 联网搜索）
+curl -N "http://localhost:8123/api/ai/manus/chat?message=搜一下低GI水果有哪些&chatId=test3"
 ```
 
 ---
 
-## 📚 知识库（麻瓜优选 RAG Demo）
+## 📚 知识库（饮食健康 RAG Demo）
 
-虚构电商品牌「麻瓜优选」的客服知识文档，作为 RAG 能力的检索源：
+面向饮食健康助手「小养」的知识文档，作为 RAG 能力的检索源：
 
 ```
 src/main/resources/document/
-├── 01-退货退款政策.md     # 7天无理由 / 运费承担
-├── 02-换货与维修政策.md   # 30天换货 / 12个月保修
-├── 03-物流配送说明.md     # 发货时效 / 包邮规则
-├── 04-会员制度与收费.md   # 普通/超级会员 / 月卡年卡
-├── 05-发票开具流程.md     # 电子普票 / 企业专票
-├── 06-账号与安全.md       # 注册 / 密码 / 注销
-└── 07-常见问题FAQ.md      # 高频问题速查
+├── 01-减脂饮食指南.md        # 热量缺口 / 三大营养素分配
+├── 02-增肌饮食指南.md        # 热量盈余 / 蛋白质 1.6~2.2g/kg
+├── 03-控糖饮食指南.md        # GI/GL / 主食置换 / 隐形糖
+├── 04-高血压DASH饮食指南.md   # 钠<2000mg / 高钾镁钙
+├── 05-痛风高尿酸饮食指南.md   # 急性/缓解期分级 / 果糖陷阱
+├── 06-维生素矿物质指南.md     # VD/B12/铁/钙/锌来源与误区
+└── 07-饮食误区FAQ.md          # 断碳 / 骨头汤补钙 / 喝粥养胃…
 ```
 
-**写作要点**：标题清晰、条目自包含（切分友好），刻意埋了检索陷阱（退货 7 天 vs 换货 30 天 vs 大家电 15 天），可作为 RAG 精度测试用例。
+**写作要点**：标题清晰、条目自包含（切分友好），刻意埋了检索陷阱（如"控糖≠无糖"、"骨头汤钙仅约 10mg/100ml"、"果汁糖≈2~3 个橙子"、"急性期可吃豆制品"），可作为 RAG 精度测试用例。
+
+**云端知识库**：若走百炼云 RAG（`CustomerApp.doChatWithRag` 里的云 Advisor 分支），需在[百炼控制台](https://bailian.console.aliyun.com)创建同名知识库「饮食健康知识库」并上传 `document/*.md`。本地开发默认走本地 SimpleVectorStore（无云库也能演示）。
 
 ---
 
@@ -109,9 +118,9 @@ src/main/resources/document/
 | 类别 | 技术 | 版本 | 作用 |
 |---|---|---|---|
 | **核心框架** | Spring Boot | 3.5.10 | Web 容器 / Bean 管理 |
-| **JDK** | Amazon Corretto | 21 | 虚拟线程 / Record Pattern |
+| **JDK** | Amazon Corretto / Microsoft OpenJDK | 21 | 虚拟线程 / Record Pattern |
 | **AI 框架** | Spring AI Alibaba | 1.1.2.0 | Agent 编排 / ChatClient / Advisor |
-| **AI 模型** | DashScope | qwen-plus / qwen-max | 阿里云百炼大模型 |
+| **AI 模型** | DashScope 百炼 | kimi-k2.7-code（默认） | 阿里云百炼大模型（多模态接口） |
 | **Embedding** | DashScope | text-embedding-v3 | 向量化 |
 | **向量库** | SimpleVectorStore | 内存版 | P1 演示，重启丢 |
 | **持久化** | Kryo | 5.6.2 | 文件版对话记忆序列化 |
@@ -129,17 +138,23 @@ src/main/resources/document/
 ```
 src/main/java/com/example/foxaiagent/
 ├── FoxAiAgentApplication.java     # Spring Boot 启动类
-├── Advisor/                       # 自定义 Advisor
+├── advisor/                       # 自定义 Advisor
 │   ├── MyLoggerAdvisor.java       # 请求/响应日志埋点
 │   └── ReReadingAdvisor.java      # Re2 提升推理质量
 ├── app/
-│   └── CustomerApp.java           # 主应用：「不烦」智能客服
+│   └── CustomerApp.java           # 主应用：「小养」饮食健康助手
+├── agent/model/                   # 自研 ReAct Agent 框架
+│   ├── BaseAgent.java             # 生命周期 / run / token 级流式 SSE
+│   ├── ReActAgent.java            # think → act 模板方法
+│   ├── ToolCallAgent.java         # 工具调用（.stream() 边推边聚合 tool call）
+│   └── FoxManus.java              # 全能智能体：搜索/抓取/生图/PDF
 ├── chatmemory/
 │   ├── FileBaseChatMemory.java    # 自定义 Kryo 文件版 ChatMemory
 │   └── KryoMemoryViewer.java      # 调试工具：查看 .kryo 文件内容
 ├── rag/                           # RAG 模块（百宝箱能力）
 │   ├── CustomerAppDocumentLoader.java  # Markdown 文档加载
-│   └── CustomerAppVectorStoreConfig.java  # 向量库装配
+│   ├── CustomerAppVectorStoreConfig.java  # 本地 SimpleVectorStore（@Profile("!prod")）
+│   └── CustomerAppCloudAdvisorConfig.java # 百炼云知识库检索增强
 └── demo/invoke/                   # 四种调用方式 Demo
     ├── SdkAiInvoke.java           # DashScope SDK
     ├── HttpAiInvoke.java          # 原生 HTTP
@@ -147,10 +162,14 @@ src/main/java/com/example/foxaiagent/
     └── LangChainAiInvoke.java     # LangChain4j
 
 src/main/resources/
-├── application.yml                # 公共配置
-├── application-local.yml          # 本地密钥（gitignored）
-└── document/                      # 知识库文档
+├── application.yml                # 公共配置（profile 占位、MCP 说明、端口 8123）
+├── application-local.yml          # 本地密钥（gitignored，仅开发）
+├── application-prod.yml           # 生产配置（全环境变量占位，无密钥）
+└── document/                      # 饮食健康知识库文档
 ```
+
+> 图片搜索 MCP 子项目见 `fox-image-search-mcp-server/`（SSE 端口 8127），仅本地开发需要；
+> 生产单容器部署默认不启用（见 `application-prod.yml` 顶部注释）。
 
 ---
 
@@ -161,13 +180,13 @@ src/main/resources/
 | 阶段 | 章节 | 关键概念 | 对应代码 |
 |---|---|---|---|
 | ① | LLM 接入 | ChatModel / ChatClient | `SpringAiAiInvoke` |
-| ② | 多轮对话 | ChatMemory + Advisor | `CustomerApp.doChat` |
+| ② | 多轮对话 | ChatMemory + Advisor | `CustomerApp`（构造） |
 | ③ | 自定义记忆 | 实现 `ChatMemory` 接口 | `FileBaseChatMemory` |
 | ④ | RAG 基础 | Document / Embedding / VectorStore | `CustomerApp.doChatWithRag` |
-| ⑤ | 工具调用 | `@Tool` / `.tools()` | （待加 `doChatWithTools`） |
-| ⑥ | 流式输出 | SSE / Flux | （待加） |
-| ⑦ | 多模态 | qwen-vl / 图片问答 | （待加） |
-| ⑧ | MCP | Model Context Protocol | （待加） |
+| ⑤ | 工具调用 | `@Tool` / ToolCallingManager | `ToolCallAgent` / `FoxManus` |
+| ⑥ | 流式输出 | SSE / Flux / token 级推送 | `BaseAgent.runStream` / `thinkStream` |
+| ⑦ | 结构化输出 | `.entity()` Bean → JSON Schema | `CustomerApp.doChatWithReport` |
+| ⑧ | MCP | Model Context Protocol | `fox-image-search-mcp-server` + `doChatWithMCP` |
 
 ---
 
@@ -178,7 +197,8 @@ src/main/resources/
 ### 1. API Key 不能进仓库
 ```
 ❌ 错：application.yml 直接写 sk-xxx，push 到 gitee 后密钥泄漏
-✅ 对：application.yml 写 ${ALI_AI_KEY}，真实 Key 放 application-local.yml（已 .gitignore）
+✅ 对：本地 key 放 application-local.yml（.gitignore）；打包时 pom 已排除该文件（maven-jar-plugin）；
+      生产走 application-prod.yml 的环境变量占位（FOX_DASHSCOPE_API_KEY 等，见 .env.example）
 ```
 
 ### 2. Spring AI 1.0 → 1.1.x API 改了
@@ -203,30 +223,37 @@ src/main/resources/
 
 ---
 
-## 🌐 部署（Serverless / 函数计算 FC）
+## 🌐 部署（微信云托管 / Docker / Serverless）
 
-本项目对 FC 部署原生友好（Spring Boot fat jar）：
+生产用 `prod` profile（`application-prod.yml`）：**无密钥、默认不连 MCP / 不连数据库**，单容器即可启动。
 
 ```bash
-# 1. 打 fat jar
-./mvnw clean package -DskipTests
+# 1. 打 fat jar（jar 内不含 application-local.yml，密钥不会被打进去）
+mvn clean package -DskipTests
 # 产物：target/Fox-ai-agent-0.0.1-SNAPSHOT.jar
 
-# 2. FC 控制台创建
-#    - 服务名：fox-ai-agent
-#    - 函数 runtime：Java 21
-#    - 触发器：HTTP 触发
-#    - 代码包：上传 jar
-#    - 启动命令：java -jar /code/app.jar
-#    - 环境变量：ALI_AI_KEY=你的 key
-
-# 3. 拿到公网 URL 即可访问
+# 2. 启动（环境变量按 .env.example 注入）
+export SPRING_PROFILES_ACTIVE=prod
+export FOX_DASHSCOPE_API_KEY=sk-你的key      # 必填
+export FOX_SEARCH_API_KEY=xxx                # 可选，联网搜索用
+java -jar Fox-ai-agent-0.0.1-SNAPSHOT.jar --server.port=80
 ```
 
-**为什么不上 Redis / 不用 Dockerfile？**
-- 单实例 + 低并发，文件版 Kryo 记忆够用
-- FC 直接吃 jar，不用容器化
-- demo 项目不引入生产复杂度
+三种部署姿势：
+
+- **微信云托管 / 任意 Docker 环境**：直接使用根目录 `Dockerfile`（多阶段构建，平台拉代码即可构建）。
+  控制台配置：端口 `80`、健康检查 `/api/doc.html`、环境变量 `SPRING_PROFILES_ACTIVE=prod` + `FOX_*`。
+- **阿里云函数计算 FC**：上传 fat jar，启动命令 `java -jar /code/app.jar`，环境变量同上。
+- **本地一键开发**：`start-dev.cmd`（MCP 图片搜索 8127 + 主应用 8123 + 前端 5173）。
+
+**生产环境能力边界（当前默认配置）**：
+- 对话 / 流式 / FoxManus 联网搜索：✅（需要 `FOX_DASHSCOPE_API_KEY`）
+- 图片搜索 MCP / 本地 RAG 向量库 / PostgreSQL：默认关闭（单容器不引入外部依赖），
+  需要时按 `application-prod.yml` 注释放开并填对应 `FOX_*` 环境变量
+
+**为什么默认不连 Redis / PG？**
+- 单实例 + 低并发，文件版 Kryo 记忆够用（部署在容器里注意挂载持久化目录）
+- demo 项目不引入生产复杂度，按需开启
 
 ---
 
@@ -237,10 +264,12 @@ src/main/resources/
 | 多轮对话 + 持久化记忆 | ✅ | 8-31 | `学习笔记/Agent笔记8-31.md` |
 | RAG 知识库基础 | ✅ | 9-1 | `学习笔记/[9-1] RAG知识库基础·笔记.md` |
 | RAG 进阶（ETL/查询重写/混合检索） | ✅ | 9-2 | `学习笔记/[9.2] RAG进阶·笔记.md` |
-| 工具调用（Function Calling） | 📋 | - | `学习笔记/Agent笔记9-3-工具调用.md` |
-| 流式输出（SSE） | 📋 | - | - |
+| 工具调用（Function Calling） | ✅ | 9-3 | `学习笔记/Agent笔记9-3-工具调用.md` |
+| 全能智能体 FoxManus（ReAct + 工具） | ✅ | 9-9 | - |
+| 流式输出（token 级 SSE） | ✅ | 9-9 | - |
+| MCP 协议（图片搜索） | 🔶 | 9-9 | `fox-image-search-mcp-server` |
+| 饮食健康助手重构（提示词 + RAG 库） | ✅ | 9-9 | - |
 | 多模态（图片） | 📋 | - | - |
-| MCP 协议 | 📋 | - | - |
 | 多 Agent 协作 | 📋 | - | - |
 
 ---

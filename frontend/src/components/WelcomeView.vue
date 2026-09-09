@@ -1,35 +1,69 @@
 <script setup>
+import { computed } from 'vue'
 import ChatInput from './ChatInput.vue'
-import { useChatStore } from '../stores/useChatStore'
+import { useChatStore, MODES } from '../stores/useChatStore'
 
 const store = useChatStore()
 
-const prompts = [
-  {
-    icon: 'search',
-    title: '联网搜索',
-    desc: '查最新资讯与版本动态',
-    q: '用联网搜索查一下：Spring AI 最新稳定版本是多少？有哪些新特性？'
-  },
-  {
-    icon: 'web',
-    title: '抓取网页',
-    desc: '提取并总结网页内容',
-    q: '抓取并总结 https://spring.io 首页的主要内容'
-  },
-  {
-    icon: 'doc',
-    title: '生成报告',
-    desc: '一键产出 PDF 文档',
-    q: '帮我生成一份关于「AI 智能体」的 PDF 报告'
-  },
-  {
-    icon: 'image',
-    title: '图片搜索',
-    desc: '搜索相关图片素材',
-    q: '搜索几张北京故宫的图片看看'
-  }
-]
+const meta = computed(() => MODES[store.state.mode] || MODES.manus)
+
+// 每个助手一套开场引导，点击直接发送
+const PROMPTS = {
+  manus: [
+    {
+      icon: 'search',
+      title: '联网搜索',
+      desc: '查最新资讯与版本动态',
+      q: '用联网搜索查一下：Spring AI 最新稳定版本是多少？有哪些新特性？'
+    },
+    {
+      icon: 'web',
+      title: '抓取网页',
+      desc: '提取并总结网页内容',
+      q: '抓取并总结 https://spring.io 首页的主要内容'
+    },
+    {
+      icon: 'doc',
+      title: '生成报告',
+      desc: '一键产出 PDF 文档',
+      q: '帮我生成一份关于「AI 智能体」的 PDF 报告'
+    },
+    {
+      icon: 'image',
+      title: '图片搜索',
+      desc: '搜索相关图片素材',
+      q: '搜索几张北京故宫的图片看看'
+    }
+  ],
+  diet: [
+    {
+      icon: 'search',
+      title: '减脂晚餐',
+      desc: '怎么吃能瘦还不饿',
+      q: '减脂期晚餐可以吃主食吗？帮我配一份 500 千卡左右的减脂晚餐'
+    },
+    {
+      icon: 'web',
+      title: '控糖水果',
+      desc: '糖尿病人能吃哪些水果',
+      q: '血糖偏高能吃水果吗？哪些水果升糖慢、一次吃多少合适？'
+    },
+    {
+      icon: 'doc',
+      title: '痛风饮食',
+      desc: '尿酸高怎么忌口',
+      q: '我尿酸偏高，火锅还能吃吗？平时饮食要注意什么？'
+    },
+    {
+      icon: 'image',
+      title: '营养误区',
+      desc: '辟谣那些养生谣言',
+      q: '骨头汤补钙、喝粥养胃这些说法靠谱吗？还有哪些常见饮食误区？'
+    }
+  ]
+}
+
+const prompts = computed(() => PROMPTS[store.state.mode] || PROMPTS.manus)
 
 function send(text) {
   store.send(text)
@@ -39,9 +73,9 @@ function send(text) {
 <template>
   <div class="welcome">
     <div class="hero">
-      <img class="brand-logo" src="/logo-fox.png" alt="Fox AI 智能体" />
-      <h1 class="brand-title brand-gradient">Fox AI智能体</h1>
-      <p class="brand-sub">一个框，解决你的搜索、抓取、报告与图片需求</p>
+      <img class="brand-logo" src="/logo-fox.png" alt="Fox AI" />
+      <h1 class="brand-title brand-gradient">{{ meta.welcomeTitle }}</h1>
+      <p class="brand-sub">{{ meta.welcomeSub }}</p>
 
       <div class="prompt-grid">
         <button
@@ -81,7 +115,7 @@ function send(text) {
 
     <div class="welcome-input">
       <ChatInput :sending="store.state.sending" @submit="send" />
-      <p class="disclaimer">内容由 AI 生成，请注意甄别准确性</p>
+      <p class="disclaimer">内容由 AI 生成，饮食建议不构成医疗诊断，疾病请及时就医</p>
     </div>
   </div>
 </template>

@@ -1,10 +1,15 @@
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, computed, nextTick } from 'vue'
+import { useChatStore, MODES } from '../stores/useChatStore'
 
 defineProps({
   sending: { type: Boolean, default: false }
 })
 const emit = defineEmits(['submit', 'stop'])
+
+const store = useChatStore()
+// 占位文案跟随当前助手：全能助手 vs 饮食健康小养
+const placeholder = computed(() => (MODES[store.state.mode] || MODES.manus).placeholder)
 
 const text = ref('')
 const ta = ref(null)
@@ -47,7 +52,7 @@ function onKeydown(e) {
         v-model="text"
         rows="1"
         :disabled="sending"
-        placeholder="问问 Fox AI，联网搜索、抓网页、生成报告…"
+        :placeholder="placeholder"
         @input="autoResize"
         @keydown="onKeydown"
         @focus="focused = true"

@@ -1,5 +1,6 @@
 <script setup>
-import { useChatStore } from '../stores/useChatStore'
+import { computed } from 'vue'
+import { useChatStore, MODES } from '../stores/useChatStore'
 
 defineProps({
   collapsed: { type: Boolean, default: false }
@@ -7,6 +8,10 @@ defineProps({
 defineEmits(['toggle'])
 
 const store = useChatStore()
+const badgeText = computed(() => {
+  const m = MODES[store.state.mode] || MODES.manus
+  return store.state.mode === 'diet' ? '饮食健康·小养' : '全能智能体'
+})
 </script>
 
 <template>
@@ -27,7 +32,7 @@ const store = useChatStore()
     <div class="topbar-center">
       <span class="mode-badge">
         <span class="dot"></span>
-        Fox智能体
+        {{ badgeText }}
       </span>
     </div>
 

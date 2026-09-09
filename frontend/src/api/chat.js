@@ -9,21 +9,29 @@ const http = axios.create({
 export default http
 
 /**
- * 调用全能智能体 /ai/manus/chat（GET + SseEmitter），
- * 用 fetch + ReadableStream 手写解析 SSE，逐段回调文本。
+ * 调用 SSE 对话接口（fetch + ReadableStream 手写解析，逐段回调文本）。
  *
  * 为什么不用 EventSource：
  *  - 服务端 complete() 后 EventSource 会自动重连，导致重复调用同一智能体；
  *  - fetch 可精确控制连接生命周期，且能兼容非标准事件块。
  *
+ * 兼容两种事件形态：
+ *  - 结构化 JSON data:{"type":"tool|answer","content":"..."}（全能智能体，tool=过程折叠展示）
+ *  - 纯文本 data:<字符串>（饮食健康助手等普通流式，一律按最终回答处理）
+ *
  * @param {string} message 用户问题
- * @param {string} chatId   会话 id（后端仅做必填参数，无跨请求上下文）
- * @param {{onChunk?: (chunk:{type:string,content:string})=>void, onDone?: ()=>void, onError?: (e:Error)=>void, onAbort?: ()=>void, signal?: AbortSignal}} handlers
+ * @param {string} chatId   会话 id
+ * @param {Object} [options]
+ * @param {string} [options.endpoint] 接口路径，默认 '/api/ai/manus/chat'
+ * @param {(chunk:{type:string,content:string})=>void} [options.onChunk]
  *        - onAbort: 用户主动终止（外部 signal abort）时回调，不视为错误
  *        - signal:  外部传入的 AbortSignal（如“停止生成”按钮），用于中途切断连接
  */
-export async function fetchSseChat(message, chatId, { onChunk, onDone, onError, onAbort, signal } = {}) {
-  const url = `/api/ai/manus/chat?message=${encodeURIComponent(message)}&chatId=${encodeURIComponent(chatId)}`
+export async function fetchSseChat(message, chatId, {
+  endpoint = '/api/ai/manus/chat',
+  onChunk, onDone, onError, onAbort, signal
+} = {}) {
+  const url = `${endpoint}?message=${encodeURIComponent(message)}&chatId=${encodeURIComponent(chatId)}`
 
   // 内部 controller 统一控制连接生命周期；外部“停止”信号与超时都转接到它。
   const controller = new AbortController()

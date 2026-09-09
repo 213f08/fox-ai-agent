@@ -2,7 +2,34 @@ import { reactive, computed } from 'vue'
 import { fetchSseChat } from '../api/chat'
 
 const STORAGE_KEY = 'fox-ai-sessions'
+const MODE_KEY = 'fox-ai-mode'
 const NEW_TITLE = '新的对话'
+
+/**
+ * 助手类型：
+ * - manus：全能智能体 FoxManus（工具调用 / 联网搜索 / 图片 / PDF）
+ * - diet ：饮食健康助手「小养」（普通流式对话，SSE 纯文本）
+ */
+export const MODES = {
+  manus: {
+    key: 'manus',
+    name: '全能助手',
+    short: 'Fox',
+    endpoint: '/api/ai/manus/chat',
+    placeholder: '问问 Fox，联网搜索、抓网页、生成报告…',
+    welcomeTitle: 'Fox AI智能体',
+    welcomeSub: '一个框，解决你的搜索、抓取、报告与图片需求'
+  },
+  diet: {
+    key: 'diet',
+    name: '饮食健康·小养',
+    short: '小养',
+    endpoint: '/api/ai/customer_app/chat/sse',
+    placeholder: '问问小养：减脂怎么吃、控糖水果怎么选、痛风能吃什么…',
+    welcomeTitle: '小养 · 饮食健康助手',
+    welcomeSub: '减脂增肌 / 控糖 / 慢病膳食 / 营养科普，把一日三餐吃得更健康'
+  }
+}
 
 let singleton = null
 
@@ -18,6 +45,8 @@ function sanitizeSessions(arr) {
     .filter((s) => s && typeof s === 'object')
     .map((s, i) => ({
       id: typeof s.id === 'string' && s.id ? s.id : makeId(),
+      // 旧数据没有 kind，默认归为全能助手
+      kind: s.kind === 'diet' ? 'diet' : 'manus',
       title: typeof s.title === 'string' && s.title ? s.title : NEW_TITLE,
       // 旧数据没有 steps 字段，补空数组，保证折叠面板能正常渲染
       messages: Array.isArray(s.messages)
@@ -39,6 +68,15 @@ function loadSessions() {
     return sanitizeSessions(JSON.parse(raw))
   } catch (_) {
     return []
+  }
+}
+
+function loadMode() {
+  try {
+    const m = localStorage.getItem(MODE_KEY)
+    return m === 'diet' ? 'diet' : 'manus'
+  } catch (_) {
+    return 'manus'
   }
 }
 
@@ -67,7 +105,8 @@ function makeId() {
 
 /**
  * 全局单例会话 store：本地会话 CRUD + 流式发送编排。
- * 数据契约：sessions: [{ id, title, messages: [{role, content}], createdAt }]
+ * 数据契约：sessions: [{ id, kind, title, messages: [{role, content}], createdAt }]
+ * kind 决定走哪个后端接口（manus 智能体 / diet 饮食助手），会话列表按当前 mode 过滤。
  */
 export function useChatStore() {
   if (singleton) return singleton
@@ -75,16 +114,45 @@ export function useChatStore() {
   const initialSessions = loadSessions()
   const state = reactive({
     sessions: initialSessions,
-    // 有历史会话时自动激活最近一个，避免刷新后误以为“数据丢了”回到欢迎页
-    activeId: initialSessions.length ? initialSessions[0].id : '',
+    // 当前助手：manus | diet；会话列表只展示该助手的会话
+    mode: loadMode(),
+    // 有同 mode 历史会话时自动激活最近一个，否则欢迎页
+    activeId: initialSessions.length
+        ? (initialSessions.find((s) => s.kind === loadMode())?.id || '')
+        : '',
     sending: false,
     // 当前流式请求的 AbortController 句柄；点击“停止生成”时调用 abort() 切断连接
     abortController: null
   })
 
+  function modeMeta() {
+    return MODES[state.mode] || MODES.manus
+  }
+
+  /** 当前助手下的会话列表 */
+  const modeSessions = computed(() => state.sessions.filter((s) => s.kind === state.mode))
+
+  function setMode(mode) {
+    const target = mode === 'diet' ? 'diet' : 'manus'
+    if (target === state.mode || state.sending) return
+    state.mode = target
+    try {
+      localStorage.setItem(MODE_KEY, target)
+    } catch (_) { /* noop */ }
+    // 激活该助手最近的会话；没有则回到欢迎页
+    const last = state.sessions.filter((s) => s.kind === target)
+    state.activeId = last.length ? last[0].id : ''
+  }
+
   function createSession() {
     const id = makeId()
-    state.sessions.unshift({ id, title: NEW_TITLE, messages: [], createdAt: Date.now() })
+    state.sessions.unshift({
+      id,
+      kind: state.mode,
+      title: NEW_TITLE,
+      messages: [],
+      createdAt: Date.now()
+    })
     state.activeId = id
     persist(state.sessions)
     return id
@@ -95,7 +163,8 @@ export function useChatStore() {
     if (idx < 0) return
     state.sessions.splice(idx, 1)
     if (state.activeId === id) {
-      state.activeId = state.sessions.length ? state.sessions[0].id : ''
+      const last = modeSessions.value
+      state.activeId = last.length ? last[0].id : ''
     }
     if (!state.sessions.length) {
       createSession()
@@ -106,12 +175,12 @@ export function useChatStore() {
 
   function activate(id) {
     if (state.sending) return
-    if (state.sessions.some((s) => s.id === id)) state.activeId = id
+    const s = state.sessions.find((x) => x.id === id)
+    // 只允许激活当前助手下的会话
+    if (s && s.kind === state.mode) state.activeId = id
   }
 
-  const activeSession = computed(
-    () => state.sessions.find((s) => s.id === state.activeId) || null
-  )
+  const activeSession = computed(() => state.sessions.find((s) => s.id === state.activeId) || null)
 
   function setTitleIfEmpty(sessionId, firstUserText) {
     const s = state.sessions.find((x) => x.id === sessionId)
@@ -125,7 +194,7 @@ export function useChatStore() {
     const text = (message || '').trim()
     if (!text || state.sending) return
 
-    // 无激活会话（如首次打开停留在欢迎页）时，自动新建会话，避免“输入了没反应”
+    // 无激活会话（如首次打开停留在欢迎页）时，自动新建当前助手会话，避免“输入了没反应”
     let session = activeSession.value
     if (!session) {
       createSession()
@@ -137,7 +206,7 @@ export function useChatStore() {
 
     // 必须用 reactive 包裹：assistantMsg 在流式期间被多次修改，
     // 若用普通对象，修改不会触发 Vue 依赖更新，导致 UI 不显示 AI 回复内容。
-    // content = 面向用户的最终回答；steps = 工具执行过程（前端折叠展示）
+    // content = 面向用户的最终回答；steps = 工具执行过程（仅全能助手有，前端折叠展示）
     const assistantMsg = reactive({ role: 'assistant', content: '', steps: [], ts: Date.now() })
     session.messages.push(assistantMsg)
 
@@ -149,9 +218,11 @@ export function useChatStore() {
 
     try {
       await fetchSseChat(text, session.id, {
+        // 按会话 kind 路由到对应后端接口
+        endpoint: (MODES[session.kind] || MODES.manus).endpoint,
         signal: ac.signal,
         onChunk: (chunk) => {
-            if (chunk.type === 'tool') {
+          if (chunk.type === 'tool') {
             // 工具执行过程单独收集，不混入最终回答
             assistantMsg.steps.push(chunk.content)
           } else {
@@ -268,9 +339,12 @@ export function useChatStore() {
   singleton = {
     state,
     activeSession,
+    modeSessions,
+    modeMeta,
     createSession,
     removeSession,
     activate,
+    setMode,
     send,
     stop,
     recall,

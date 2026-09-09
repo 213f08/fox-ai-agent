@@ -7,6 +7,22 @@ defineProps({
 
 const store = useChatStore()
 
+// 侧边栏入口：左侧「助手切换」区
+const modes = [
+  {
+    key: 'manus',
+    name: '全能助手',
+    desc: '搜索·抓取·工具',
+    icon: 'spark'
+  },
+  {
+    key: 'diet',
+    name: '饮食健康·小养',
+    desc: '减脂·控糖·营养',
+    icon: 'leaf'
+  }
+]
+
 function fmtTime(ts) {
   if (!ts) return ''
   const d = new Date(ts)
@@ -22,13 +38,40 @@ function fmtTime(ts) {
 <template>
   <aside class="sidebar" :class="{ collapsed }">
     <div class="sidebar-inner">
+      <!-- 助手切换 -->
+      <div class="mode-switch">
+        <button
+          v-for="m in modes"
+          :key="m.key"
+          class="mode-btn"
+          :class="{ active: store.state.mode === m.key }"
+          @click="store.setMode(m.key)"
+        >
+          <span class="m-icon">
+            <svg v-if="m.icon === 'spark'" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
+              <circle cx="12" cy="12" r="3.2" />
+            </svg>
+            <svg v-else viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 21c-4.5-2.6-7-6-7-10a7 7 0 0 1 14 0c0 4-2.5 7.4-7 10z" />
+              <path d="M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
+            </svg>
+          </span>
+          <span class="m-body">
+            <span class="m-name">{{ m.name }}</span>
+            <span class="m-desc">{{ m.desc }}</span>
+          </span>
+          <span v-if="store.state.mode === m.key" class="m-check">✓</span>
+        </button>
+      </div>
+
       <div class="sidebar-title">
         <span>最近对话</span>
       </div>
 
       <div class="session-list">
         <div
-          v-for="s in store.state.sessions"
+          v-for="s in store.modeSessions"
           :key="s.id"
           class="session-item"
           :class="{ active: s.id === store.state.activeId }"
@@ -46,11 +89,11 @@ function fmtTime(ts) {
           </button>
         </div>
 
-        <div v-if="!store.state.sessions.length" class="sidebar-empty">暂无对话</div>
+        <div v-if="!store.modeSessions.length" class="sidebar-empty">暂无对话，快开始吧</div>
       </div>
 
       <div class="sidebar-footer">
-        <p class="brand">Fox AI智能体</p>
+        <p class="brand">Fox AI智能体 · 小养</p>
       </div>
     </div>
   </aside>
@@ -84,6 +127,82 @@ function fmtTime(ts) {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-2);
+}
+
+/* ===== 助手切换 ===== */
+.mode-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 0 14px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  text-align: left;
+  border-radius: 11px;
+  color: var(--text-1);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.mode-btn:hover {
+  background: rgba(31, 79, 216, 0.06);
+}
+.mode-btn.active {
+  background: linear-gradient(120deg, rgba(47, 107, 255, 0.1), rgba(47, 107, 255, 0.05));
+  border-color: rgba(47, 107, 255, 0.22);
+}
+
+.m-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  color: var(--primary);
+  background: rgba(47, 107, 255, 0.1);
+}
+.mode-btn:not(.active) .m-icon {
+  color: var(--text-2);
+  background: rgba(31, 79, 216, 0.06);
+}
+
+.m-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.m-name {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.m-desc {
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.m-check {
+  flex-shrink: 0;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .session-list {

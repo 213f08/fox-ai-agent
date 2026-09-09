@@ -6,6 +6,9 @@ defineProps({
 })
 
 const store = useChatStore()
+// 注意：store 是普通对象，其 computed 属性（modeSessions）在模板里不会自动解包，
+// 必须在这里解成顶层绑定，否则 v-for 会迭代到 ref 内部字段导致取 id 崩溃
+const modeSessions = store.modeSessions
 
 // 侧边栏入口：左侧「助手切换」区
 const modes = [
@@ -71,7 +74,7 @@ function fmtTime(ts) {
 
       <div class="session-list">
         <div
-          v-for="s in store.modeSessions"
+          v-for="s in modeSessions"
           :key="s.id"
           class="session-item"
           :class="{ active: s.id === store.state.activeId }"
@@ -89,7 +92,7 @@ function fmtTime(ts) {
           </button>
         </div>
 
-        <div v-if="!store.modeSessions.length" class="sidebar-empty">暂无对话，快开始吧</div>
+        <div v-if="!modeSessions.length" class="sidebar-empty">暂无对话，快开始吧</div>
       </div>
 
       <div class="sidebar-footer">

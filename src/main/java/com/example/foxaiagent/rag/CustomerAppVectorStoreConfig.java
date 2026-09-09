@@ -8,6 +8,7 @@ import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 
 import java.io.File;
 import java.util.List;
@@ -20,8 +21,13 @@ import java.util.List;
  *   缓存不存在时自动加载 classpath:document/*.md 入库，并落盘缓存</li>
  *   文档更新后需删除缓存文件 tmp/vector-store.json 才会重新向量化</li>
  *
+ * <p>仅本地开发启用（@Profile("!prod")）：
+ * 无缓存首次启动会对 43 个文档片段逐条调 embedding + 关键词增强 API，耗时数分钟，
+ * 且云托管每次部署都是全新容器、没有缓存，会拖垮启动导致存活探针失败。
+ * 生产 RAG 走百炼云端知识库（CustomerAppCloudAdvisorConfig），用不到这个本地向量库。</p>
  */
 @Configuration
+@Profile("!prod")
 @Slf4j
 public class CustomerAppVectorStoreConfig {
     @Resource

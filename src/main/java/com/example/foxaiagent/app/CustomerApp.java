@@ -35,7 +35,11 @@ import java.util.List;
 @Component
 @Slf4j
 public class CustomerApp {
-    @Resource
+    /**
+     * 仅本地 profile 有 VectorStore bean（CustomerAppVectorStoreConfig 标注了 @Profile("!prod")），
+     * prod 走百炼云端知识库，用不到本地向量库 → required=false，生产不因缺 bean 启动失败。
+     */
+    @Autowired(required = false)
     private VectorStore pgVectorStore;
     private final ChatClient chatClient;
     @Resource
@@ -152,7 +156,8 @@ public class CustomerApp {
         log.info("report: {}", report);
         return report;
     }
-    @Resource
+    @Autowired(required = false)
+    @Qualifier("customerAppVectorStore")
     private VectorStore customerAppVectorStore;
 
     /**

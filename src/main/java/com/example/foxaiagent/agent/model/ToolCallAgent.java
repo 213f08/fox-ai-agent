@@ -12,6 +12,7 @@ import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
@@ -19,7 +20,13 @@ import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.model.tool.ToolExecutionResult;
 import org.springframework.ai.tool.ToolCallback;
 
+import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -125,6 +132,10 @@ public class ToolCallAgent extends ReActAgent {
                 getMessageList().add(userMessage);
                 nextStepPromptInjected = true;
             }
+            // 流式模式（SSE）：边生成边把 token 推给前端，实现打字机效果
+            if (streamTokenSink != null) {
+                return thinkStream();
+            }
             //调用AI大模型。获取工具调用结果
             List<Message> messageList = getMessageList();
             Prompt prompt=new Prompt(messageList,this.chatOptions);
@@ -135,34 +146,8 @@ public class ToolCallAgent extends ReActAgent {
                     .chatResponse();
             // 记录响应
             this.toolCallChatResponse = chatResponse;
-//        助手消息
-            AssistantMessage assistantMessage = chatResponse.getResult().getOutput();
-            // 工具调用列表
-            List<AssistantMessage.ToolCall> toolCallList=assistantMessage.getToolCalls();
-            if (toolCallList.isEmpty()){
-                // 模型直接给出最终答复，无需再行动：把答复写回上下文并结束整个循环
-                log.info("{} 思考完成：模型直接给出答复，本轮结束", getName());
-                getMessageList().add(assistantMessage);
-                setState(AgentState.FINISHED);
-                return false;
-            }
-            // 若模型已给出文本回答、且本轮唯一动作是调用终止工具(doTerminate)，
-            // 说明这是"最终回答 + 请求结束"：直接采纳文本回答，不再走工具执行路径，
-            // 否则回答文本会被"工具执行结果"日志覆盖，用户看不到 AI 回复。
-            boolean onlyTerminate = toolCallList.stream()
-                    .allMatch(toolCall -> "doTerminate".equals(toolCall.name()));
-            if (onlyTerminate && StrUtil.isNotBlank(assistantMessage.getText())) {
-                log.info("{} 思考完成：模型给出最终回答并请求终止，直接采纳回答", getName());
-                getMessageList().add(assistantMessage);
-                setState(AgentState.FINISHED);
-                return false;
-            }
-            // 一行日志概要展示本轮要调用的工具（含参数摘要，不刷屏）
-            String toolCallInfo = toolCallList.stream()
-                    .map(toolCall -> toolCall.name() + "(" + shorten(toolCall.arguments(), 100) + ")")
-                    .collect(Collectors.joining("；"));
-            log.info("{} 思考完成：本轮将调用 {} 个工具 —— {}", getName(), toolCallList.size(), toolCallInfo);
-            return true;
+            // 下面的分支判断与流式路径完全一致，抽成 decideAfterThink 复用
+            return decideAfterThink(chatResponse.getResult().getOutput());
         } catch (Exception e) {
             log.error("{} 思考过程出错：{}", getName(), shorten(String.valueOf(e), 300));
             getMessageList().add(new AssistantMessage("思考过程出错：" + shorten(e.getMessage(), 200)));
@@ -172,6 +157,127 @@ public class ToolCallAgent extends ReActAgent {
         }
 
 
+    }
+
+    /**
+     * 思考阶段的决策逻辑：判断模型是"直接给出最终答复"还是"本轮要调工具"。
+     * 同步（call）与流式（stream）两条路径共用，保证行为一致。
+     *
+     * @param assistantMessage 模型本轮输出（含文本与工具调用请求）
+     * @return true = 需要执行 act()，false = 本轮思考结束
+     */
+    private boolean decideAfterThink(AssistantMessage assistantMessage) {
+        List<AssistantMessage.ToolCall> toolCallList = assistantMessage.getToolCalls();
+        if (toolCallList.isEmpty()){
+            // 模型直接给出最终答复，无需再行动：把答复写回上下文并结束整个循环
+            log.info("{} 思考完成：模型直接给出答复，本轮结束", getName());
+            getMessageList().add(assistantMessage);
+            setState(AgentState.FINISHED);
+            return false;
+        }
+        // 若模型已给出文本回答、且本轮唯一动作是调用终止工具(doTerminate)，
+        // 说明这是"最终回答 + 请求结束"：直接采纳文本回答，不再走工具执行路径，
+        // 否则回答文本会被"工具执行结果"日志覆盖，用户看不到 AI 回复。
+        boolean onlyTerminate = toolCallList.stream()
+                .allMatch(toolCall -> "doTerminate".equals(toolCall.name()));
+        if (onlyTerminate && StrUtil.isNotBlank(assistantMessage.getText())) {
+            log.info("{} 思考完成：模型给出最终回答并请求终止，直接采纳回答", getName());
+            getMessageList().add(assistantMessage);
+            setState(AgentState.FINISHED);
+            return false;
+        }
+        // 一行日志概要展示本轮要调用的工具（含参数摘要，不刷屏）
+        String toolCallInfo = toolCallList.stream()
+                .map(toolCall -> toolCall.name() + "(" + shorten(toolCall.arguments(), 100) + ")")
+                .collect(Collectors.joining("；"));
+        log.info("{} 思考完成：本轮将调用 {} 个工具 —— {}", getName(), toolCallList.size(), toolCallInfo);
+        return true;
+    }
+
+    /**
+     * 流式思考：把本轮模型输出边生成边推给前端（打字机效果），
+     * 同时在本地聚合成完整的 AssistantMessage —— 工具调用请求必须等流结束才能判断是否执行。
+     *
+     * <p>为什么必须自己聚合：流式下模型输出的 tool call 的 arguments 是分片 JSON，
+     * 只有拼完整才能交给 ToolCallingManager 执行。</p>
+     */
+    private boolean thinkStream() {
+        Prompt prompt = new Prompt(getMessageList(), this.chatOptions);
+        StringBuilder textBuilder = new StringBuilder();
+        Map<String, ToolCallBuilder> toolCallBuilders = new LinkedHashMap<>();
+
+        try {
+            Flux<ChatResponse> flux = getChatClient().prompt(prompt)
+                    .system(getSystemPrompt())
+                    .toolCallbacks(availableTools)
+                    .stream()
+                    .chatResponse();
+            flux
+                    // 切到 boundedElastic：sseEmitter.send 是同步 IO，不能堵在 netty 的 event loop 线程上
+                    .publishOn(Schedulers.boundedElastic())
+                    .doOnNext(chunk -> {
+                        if (chunk == null || chunk.getResult() == null || chunk.getResult().getOutput() == null) {
+                            return;
+                        }
+                        AssistantMessage out = chunk.getResult().getOutput();
+                        if (StrUtil.isNotBlank(out.getText())) {
+                            textBuilder.append(out.getText());
+                            // 逐片段推给前端
+                            pushToken(out.getText());
+                        }
+                        for (AssistantMessage.ToolCall toolCall : out.getToolCalls()) {
+                            mergeToolCall(toolCallBuilders, toolCall);
+                        }
+                    })
+                    .blockLast();
+        } catch (Exception e) {
+            log.error("{} 流式思考出错：{}", getName(), shorten(String.valueOf(e), 300));
+            getMessageList().add(new AssistantMessage("思考过程出错：" + shorten(e.getMessage(), 200)));
+            // 思考阶段失败时直接结束循环，避免同一错误重复刷满 maxSteps
+            setState(AgentState.FINISHED);
+            return false;
+        }
+
+        List<AssistantMessage.ToolCall> toolCallList = toolCallBuilders.values().stream()
+                .map(ToolCallBuilder::build)
+                .collect(Collectors.toList());
+        // 四参构造器是 protected，对外只用 builder
+        AssistantMessage assistantMessage = AssistantMessage.builder()
+                .content(textBuilder.toString())
+                .toolCalls(toolCallList)
+                .build();
+        // 构造与 call() 路径等价的 ChatResponse，供 act() 交给 ToolCallingManager 执行
+        this.toolCallChatResponse = new ChatResponse(List.of(new Generation(assistantMessage)));
+        return decideAfterThink(assistantMessage);
+    }
+
+    /**
+     * 把流式分片的工具调用请求合并成一个：同 id 的 arguments 按顺序拼接。
+     */
+    private static void mergeToolCall(Map<String, ToolCallBuilder> builders, AssistantMessage.ToolCall toolCall) {
+        // 没有 id 时退化用 name + 序号区分，避免多个同类调用被错误合并
+        String key = StrUtil.isNotBlank(toolCall.id())
+                ? toolCall.id()
+                : toolCall.name() + "#" + builders.size();
+        ToolCallBuilder builder = builders.computeIfAbsent(key, k -> new ToolCallBuilder());
+        if (StrUtil.isNotBlank(toolCall.id())) builder.id = toolCall.id();
+        if (StrUtil.isNotBlank(toolCall.name())) builder.name = toolCall.name();
+        if (StrUtil.isNotBlank(toolCall.type())) builder.type = toolCall.type();
+        if (StrUtil.isNotBlank(toolCall.arguments())) builder.arguments.append(toolCall.arguments());
+    }
+
+    /**
+     * 工具调用请求的分片累加器（arguments 在流里是切成多段 JSON 字符串送过来的）。
+     */
+    private static class ToolCallBuilder {
+        private String id;
+        private String type;
+        private String name;
+        private final StringBuilder arguments = new StringBuilder();
+
+        private AssistantMessage.ToolCall build() {
+            return new AssistantMessage.ToolCall(id, type, name, arguments.toString());
+        }
     }
 
     /**

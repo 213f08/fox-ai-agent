@@ -151,11 +151,13 @@ export function useChatStore() {
       await fetchSseChat(text, session.id, {
         signal: ac.signal,
         onChunk: (chunk) => {
-          if (chunk.type === 'tool') {
+            if (chunk.type === 'tool') {
             // 工具执行过程单独收集，不混入最终回答
             assistantMsg.steps.push(chunk.content)
           } else {
-            assistantMsg.content += (assistantMsg.content ? '\n' : '') + chunk.content
+            // 后端已是 token 级流式：片段直接拼接，不能再在片段之间插换行，
+            // 否则正文会被切成一行一个字。换行由后端在整段（非流式）内容末尾自带。
+            assistantMsg.content += chunk.content
           }
           persistSoon(state.sessions)
         },

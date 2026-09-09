@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 
 @Data
@@ -39,6 +40,29 @@ public abstract class BaseAgent {
 
     //    Mermory记忆(需要自主维护会话上下文)
     private List<Message> messageList=new ArrayList<>();
+
+    /**
+     * 流式 token 出口：非空表示当前处于 SSE 流式模式（runStream）。
+     * 子类（ToolCallAgent）在思考阶段应当边生成边往这里推，前端才有打字机效果；
+     * 为 null 表示同步执行（run），保持一次拿全量结果。
+     */
+    protected transient Consumer<String> streamTokenSink;
+
+    /**
+     * 本 step 是否已通过 streamTokenSink 逐 token 推送过内容。
+     * 用于避免 step() 返回整段文本后 runStream 又重复推一次。
+     */
+    protected transient boolean streamedThisStep = false;
+
+    /**
+     * 推送一个流式片段给前端（同步执行 run() 时为空操作）。
+     */
+    protected void pushToken(String token) {
+        if (streamTokenSink != null && StrUtil.isNotBlank(token)) {
+            streamedThisStep = true;
+            streamTokenSink.accept(token);
+        }
+    }
 
     public String run(String userPrompt){
 //        基础校验
@@ -129,6 +153,15 @@ public abstract class BaseAgent {
     }
     public SseEmitter runStream(String userPrompt){
         SseEmitter sseEmitter = new SseEmitter(300000L);
+        // 流式出口：模型每生成一个片段就立刻推给前端，而不是等整个 step 跑完
+        // （sseEmitter.send 是同步 IO，这里只做异常兜底，不让它打断 agent 主循环）
+        this.streamTokenSink = text -> {
+            try {
+                sseEmitter.send(buildEvent("answer", text));
+            } catch (Exception sendEx) {
+                log.warn("SSE 片段推送失败：{}", sendEx.getMessage());
+            }
+        };
         // 使用线程异步执行，避免阻塞主线程
         CompletableFuture.runAsync(() -> {
 //        基础校验
@@ -161,14 +194,22 @@ public abstract class BaseAgent {
                     int stepNumber=i+1;
                     currentStep=stepNumber;
                     log.info("Step {}/{} :", stepNumber,maxSteps);
+                    streamedThisStep = false;
 //            单步执行
                     String stepResult=step();
-                    results.add(stepResult);
+                    if (stepResult != null) {
+                        results.add(stepResult);
+                    }
                     String stepType=getLastStepType();
                     if ("answer".equals(stepType)) {
                         hasAnswer = true;
                     }
-                    sseEmitter.send(buildEvent(stepType, stepResult));
+                    // 该 step 内容已逐 token 推给前端时，step() 返回 null，这里不再整段重复推。
+                    // 整段推送（工具结果 / 兜底总结）时在末尾补换行，保证前端多段内容不会粘连成一坨
+                    if (StrUtil.isNotBlank(stepResult)) {
+                        sseEmitter.send(buildEvent(stepType,
+                                "answer".equals(stepType) ? stepResult + "\n" : stepResult));
+                    }
                 }
                 if (currentStep>=maxSteps){
                     state=AgentState.FINISHED;
@@ -179,7 +220,7 @@ public abstract class BaseAgent {
                 if (!hasAnswer) {
                     String summary = generateFinalAnswer();
                     if (StrUtil.isNotBlank(summary)) {
-                        sseEmitter.send(buildEvent("answer", summary));
+                        sseEmitter.send(buildEvent("answer", summary + "\n"));
                     }
                 }
                 // 正常结束：主动关闭 SSE 连接，否则前端 fetch 会一直等待直至超时
@@ -195,19 +236,22 @@ public abstract class BaseAgent {
                     sseEmitter.completeWithError(ex);
                 }
             }finally {
+                this.streamTokenSink = null;
                 cleanup();
             }
         });
         // 处理超时
         sseEmitter.onTimeout(() -> {
             this.state=AgentState.ERROR;
+            this.streamTokenSink = null;
             this.cleanup();
-            log.warn("SSE connection timed out");
+                log.warn("SSE connection timed out");
         });
         sseEmitter.onCompletion(() -> {
             if (this.state == AgentState.RUNNING){
                 this.state=AgentState.FINISHED;
             }
+            this.streamTokenSink = null;
             this.cleanup();
             log.info("SSE connection completed");
         });

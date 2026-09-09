@@ -29,7 +29,9 @@ public abstract class ReActAgent extends BaseAgent{
           boolean shouldAct = think();
           if (!shouldAct) {
               lastStepType = "answer";   // 模型直接给出答复
-              return lastAssistantText();
+              // 流式模式下这段文本已经逐 token 推给前端了，
+              // 返回 null 让 runStream 跳过"整段再推一次"，否则用户会看到回答出现两遍
+              return streamedThisStep ? null : lastAssistantText();
           }
           lastStepType = "tool";         // 本轮是工具执行过程
           return act();

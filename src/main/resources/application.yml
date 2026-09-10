@@ -39,6 +39,15 @@ customer-app:
   # 百炼云知识库名称（需在百炼控制台创建同名知识库并上传 document/*.md，用名称不是 ID）。
   # 云端 RAG 依赖它；本地 RAG 走 document/*.md 的 SimpleVectorStore。
   knowledge-index: 饮食健康知识库
+  rag:
+    # 本地知识库检索的相似度下限（余弦相似度 0~1）。低于该分数的文档视为「没命中」：
+    # 不注入 prompt，前端也不显示检索过程 —— 闲聊/无意义输入就是靠它挡掉的。
+    # 阈值 0 会让任何输入都返回 topK 条，看起来像"随便问一句也走了 RAG"。
+    # 0.6 是实测定标：真实饮食问题 0.71~0.75，闲聊/跑题 0.48~0.55，取中间留足余量。
+    # 想改看日志：[小养RAG] 检索命中 N 篇，阈值 x，最高分 y
+    similarity-threshold: 0.6
+    # 单次检索返回的最大文档数
+    top-k: 4
 
 # springdoc-openapi 接口文档配置
 springdoc:

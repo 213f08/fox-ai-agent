@@ -53,6 +53,23 @@ public class CustomerApp {
     private final ChatClient chatClient;
     @Resource
     private QueryRewriter queryRewriter;
+
+    /**
+     * 知识库检索的相似度下限（余弦相似度，0~1）。
+     * <p>
+     * 不设会吃 Spring AI 的默认值 0.0 —— 那意味着「任何文档都算命中」，
+     * 随便一句「哦豁」「哈哈」都会被塞进 4 篇最相近的文档当参考资料，
+     * 前端还会显示「完成 4 个过程步骤」，看起来像无意义问题也走了 RAG。
+     * <p>
+     * 0.6 是本地实测定标：真实饮食问题 0.71~0.75，闲聊/跑题 0.48~0.55，取中间留足余量。
+     * 觉得仍然误命中就往上调（0.65），觉得该命中没命中就往下调（0.5 左右）。
+     * 调参时看日志 [小养RAG] 检索命中 N 篇，阈值 x，最高分 y 里的「最高分」。
+     */
+    @org.springframework.beans.factory.annotation.Value("${customer-app.rag.similarity-threshold:0.6}")
+    private double ragSimilarityThreshold;
+
+    @org.springframework.beans.factory.annotation.Value("${customer-app.rag.top-k:4}")
+    private int ragTopK;
     /**
      * 系统提示词：设定助手的角色、风格和边界，每次对话自动携带。
      * 角色定位是「饮食健康助手」——不是医生，不诊断、不替代医嘱；
@@ -216,8 +233,38 @@ public class CustomerApp {
             log.info("[小养RAG] 查询重写：{} → {}", message, rewritten);
 
             // ① 检索本地知识库，把命中结果作为「可见过程」先推给前端（type=rag）
-            List<Document> docs = customerAppVectorStore.similaritySearch(
-                    SearchRequest.builder().query(rewritten).topK(4).build());
+            //    先用阈值 0 取回 topK 条（SimpleVectorStore 按分数降序），拿到真实最高分，
+            //    再按阈值自己过滤 —— 这样日志里的分数才对调参有意义。
+            //    （若直接把 threshold 传给 SearchRequest，没命中的话一份文档都拿不到，
+            //     日志只能打 0.0000，看不出"差多少才命中"。）
+            List<Document> candidates = customerAppVectorStore.similaritySearch(
+                    SearchRequest.builder()
+                            .query(rewritten)
+                            .topK(ragTopK)
+                            .similarityThreshold(0.0)
+                            .build());
+            // getScore() 是包装类型，理论上可能为 null（自定义 VectorStore 不回填分数），
+            // 直接拆箱会 NPE，这里统一兜底成 0。
+            double topScore = candidates.stream()
+                    .map(Document::getScore)
+                    .filter(java.util.Objects::nonNull)
+                    .mapToDouble(Double::doubleValue)
+                    .max()
+                    .orElse(0d);
+            List<Document> docs = candidates.stream()
+                    .filter(d -> d.getScore() != null && d.getScore() >= ragSimilarityThreshold)
+                    .toList();
+            // SLF4J 只认 {} 占位，不支持 {:.4f} 这类格式化语法，小数位自己截
+            log.info("[小养RAG] 检索命中 {} 篇，阈值 {}，最高分 {}",
+                    docs.size(), ragSimilarityThreshold, String.format("%.4f", topScore));
+
+            // 无一条过阈值 → 判定为闲聊 / 超出知识库范围，不拼资料、不发 rag 事件，
+            // 直接走纯对话，前端也就不会显示「过程步骤」。
+            if (docs.isEmpty()) {
+                log.info("[小养RAG] 未命中（最高分 {} < 阈值 {}），退化为纯对话", topScore, ragSimilarityThreshold);
+                return plainChatStream(message, chatId);
+            }
+
             List<String> ragEvents = new ArrayList<>();
             StringBuilder context = new StringBuilder();
             int idx = 0;
@@ -229,7 +276,6 @@ public class CustomerApp {
                 ragEvents.add(streamEvent("rag", "📄 " + filename.replace(".md", "") + "\n" + snippet));
                 context.append("【资料").append(idx).append("｜").append(filename).append("】\n").append(doc.getText()).append("\n\n");
             }
-            log.info("[小养RAG] 检索命中 {} 篇知识库文档", docs.size());
 
             // ② 参考资料拼进 system（保留小养人设，QA 内容优先于模型先验知识），正文流式返回
             Flux<String> answer = chatClient.prompt()
@@ -244,7 +290,13 @@ public class CustomerApp {
             return Flux.concat(Flux.fromIterable(ragEvents), answer);
         }
         // 生产无本地向量库：纯对话流式（JSON 事件包装，前端解析一致）
+        return plainChatStream(message, chatId);
+    }
+
+    /** 不带知识库资料的纯对话流式（小养人设 + 多轮记忆依然生效） */
+    private Flux<String> plainChatStream(String message, String chatId) {
         return chatClient.prompt()
+                .system(SYSTEM_PROMPT)
                 .user(message)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
                 .stream()

@@ -19,6 +19,16 @@
   --shadow-md: 0 8px 24px rgba(31, 79, 216, 0.1);
   --shadow-lg: 0 16px 40px rgba(31, 79, 216, 0.16);
   --transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* 刘海屏 / 灵动岛 / 手势条安全区（配合 index.html 的 viewport-fit=cover）。
+     env() 在旧浏览器不支持时回退 0px，不影响桌面端。 */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+
+  /* 移动端断点，JS（App.vue）与 CSS 共用同一数值，避免两边不一致 */
+  --bp-mobile: 820px;
 }
 
 * {
@@ -33,6 +43,30 @@ body,
   height: 100%;
 }
 
+/* 整个应用是「固定外壳 + 内部滚动区」，页面本身永远不该滚动。
+   移动端地址栏伸缩会让 100% 与实际可视高度对不上，这里禁止页面级滚动兜底。 */
+html,
+body {
+  overflow: hidden;
+}
+
+/* 移动端浏览器地址栏会伸缩，100% 会随之跳动；dvh 跟随可视区域实时变化。
+   用 @supports 包住而不是直接写，旧内核不识别 dvh 时整条声明会被丢弃，
+   上面的 100% 才是生效值。 */
+@supports (height: 100dvh) {
+  html,
+  body,
+  #app {
+    height: 100dvh;
+  }
+}
+
+html {
+  /* 阻止 iOS 横屏（或大字号设置）自动放大文字 */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   font-family: 'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont,
     'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -42,6 +76,8 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* 禁止整页下拉橡皮筋，避免消息列表滚到底后把整个页面拖着动 */
+  overscroll-behavior-y: none;
 }
 
 button {
@@ -50,12 +86,15 @@ button {
   border: none;
   background: none;
   color: inherit;
+  /* 去掉移动端点击时的灰色高亮块，改用 :active 做反馈 */
+  -webkit-tap-highlight-color: transparent;
 }
 
 input,
 textarea {
   font-family: inherit;
   color: inherit;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* 滚动条 */
@@ -168,4 +207,46 @@ textarea {
 .icon-btn:hover {
   background: rgba(31, 79, 216, 0.08);
   color: var(--primary);
+}
+
+/* ============================================================
+   移动端 / 触屏设备适配
+   - 断点 820px：手机全尺寸 + 平板竖屏
+   - (hover: none)：触屏设备（无真实 hover），只影响交互方式
+   ============================================================ */
+@media (max-width: 820px) {
+  /* 触屏上悬停态不会触发，用按下反馈替代 */
+  .btn,
+  .icon-btn {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .btn:active {
+    transform: scale(0.97);
+  }
+  .icon-btn:active {
+    background: rgba(31, 79, 216, 0.12);
+    color: var(--primary);
+  }
+  /* 移动端滚动条默认隐藏（iOS 本来也不显示，这里统一桌面内核的移动模式） */
+  ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+  .btn {
+    padding: 8px 14px;
+    font-size: 13.5px;
+  }
+  .icon-btn {
+    width: 34px;
+    height: 34px;
+  }
+}
+
+/* 触屏设备：所有依赖 :hover 才出现的东西都要常驻，否则永远点不到 */
+@media (hover: none) {
+  .btn-primary:hover {
+    transform: none;
+    box-shadow: var(--shadow-md);
+  }
 }

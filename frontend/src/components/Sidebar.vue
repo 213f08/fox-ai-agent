@@ -2,8 +2,13 @@
 import { useChatStore } from '../stores/useChatStore'
 
 defineProps({
-  collapsed: { type: Boolean, default: false }
+  collapsed: { type: Boolean, default: false },
+  // 是否处于移动端布局（移动端下侧栏变成覆盖式抽屉）
+  mobile: { type: Boolean, default: false },
+  // 移动端抽屉是否展开
+  open: { type: Boolean, default: false }
 })
+const emit = defineEmits(['close'])
 
 const store = useChatStore()
 // 注意：store 是普通对象，其 computed 属性（modeSessions）在模板里不会自动解包，
@@ -36,11 +41,36 @@ function fmtTime(ts) {
   }
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
+
+// 移动端选完就收起抽屉，否则它一直挡着对话区；
+// 桌面端 mobile 为 false，close 事件不会产生任何效果。
+function pickMode(key) {
+  store.setMode(key)
+  emit('close')
+}
+
+function pickSession(id) {
+  store.activate(id)
+  emit('close')
+}
 </script>
 
 <template>
-  <aside class="sidebar" :class="{ collapsed }">
+  <aside
+    class="sidebar"
+    :class="{ collapsed: !mobile && collapsed, mobile, open: mobile && open }"
+  >
     <div class="sidebar-inner">
+      <!-- 移动端抽屉头部：显式关闭按钮（也可点遮罩关闭） -->
+      <div v-if="mobile" class="drawer-head">
+        <span class="drawer-title">Fox AI</span>
+        <button class="icon-btn" title="收起侧栏" aria-label="收起侧栏" @click="emit('close')">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      </div>
+
       <!-- 助手切换 -->
       <div class="mode-switch">
         <button
@@ -48,7 +78,7 @@ function fmtTime(ts) {
           :key="m.key"
           class="mode-btn"
           :class="{ active: store.state.mode === m.key }"
-          @click="store.setMode(m.key)"
+          @click="pickMode(m.key)"
         >
           <span class="m-icon">
             <svg v-if="m.icon === 'spark'" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -78,14 +108,14 @@ function fmtTime(ts) {
           :key="s.id"
           class="session-item"
           :class="{ active: s.id === store.state.activeId }"
-          @click="store.activate(s.id)"
+          @click="pickSession(s.id)"
         >
           <svg class="s-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
           <span class="s-title">{{ s.title }}</span>
           <span class="s-time">{{ fmtTime(s.createdAt) }}</span>
-          <button class="s-del" title="删除会话" @click.stop="store.removeSession(s.id)">
+          <button class="s-del" title="删除会话" aria-label="删除会话" @click.stop="store.removeSession(s.id)">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
             </svg>
@@ -112,9 +142,13 @@ function fmtTime(ts) {
   overflow: hidden;
 }
 
-.sidebar.collapsed {
-  width: 0;
-  border-right-color: transparent;
+/* 折叠只用于桌面：把宽度收到 0。
+   移动端宽度由抽屉规则接管，加 min-width 隔离避免被这条覆盖。 */
+@media (min-width: 821px) {
+  .sidebar.collapsed {
+    width: 0;
+    border-right-color: transparent;
+  }
 }
 
 .sidebar-inner {
@@ -123,6 +157,20 @@ function fmtTime(ts) {
   display: flex;
   flex-direction: column;
   padding: 16px 12px 14px;
+}
+
+/* 抽屉头部默认不渲染（v-if="mobile"），样式仅移动端生效 */
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 6px 10px 10px;
+  margin-bottom: 6px;
+}
+.drawer-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
 }
 
 .sidebar-title {
@@ -215,6 +263,9 @@ function fmtTime(ts) {
   flex-direction: column;
   gap: 3px;
   padding-right: 2px;
+  /* 列表滚到底后继续滑动不带动页面 */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .session-item {
@@ -297,9 +348,72 @@ function fmtTime(ts) {
   font-weight: 500;
   color: var(--text-2);
 }
-.sidebar-footer .disclaimer {
-  margin-top: 3px;
-  font-size: 11px;
-  color: var(--text-3);
+
+/* ===== 触屏：删除按钮必须常驻 =====
+   触屏没有 hover，opacity:0 的按钮永远不出现，会话就删不掉了。
+   同时覆盖窄屏桌面窗口——那种宽度下也不该依赖 hover。 */
+@media (hover: none), (max-width: 820px) {
+  .s-del {
+    opacity: 1;
+    width: 28px;
+    height: 28px;
+  }
+  .s-del:active {
+    color: var(--danger);
+    background: rgba(239, 68, 68, 0.12);
+  }
+  .session-item:active {
+    background: rgba(31, 79, 216, 0.12);
+  }
+  .mode-btn:active {
+    background: rgba(31, 79, 216, 0.1);
+  }
+}
+
+/* ===== 移动端：固定抽屉 ===== */
+@media (max-width: 820px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 60;
+    width: min(280px, 84vw);
+    border-right: none;
+    box-shadow: 0 0 40px rgba(15, 23, 42, 0.24);
+    transform: translateX(-101%);
+    transition: transform var(--transition);
+    /* 打开时整条侧栏的滚动不外溢到页面 */
+    overscroll-behavior: contain;
+    /* 注意：底部安全区只在这里的 sidebar-inner 加一次。
+       若外层再补一次，两个 100% 高度叠加会把底部撑出双倍留白。 */
+  }
+
+  .sidebar.mobile.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-inner {
+    width: 100%;
+    padding: 10px 12px calc(12px + var(--sab));
+  }
+
+  /* 触屏点击目标放大到 44px 以上 */
+  .mode-btn {
+    padding: 11px 12px;
+  }
+  .session-item {
+    padding: 12px 12px;
+  }
+  .s-title {
+    font-size: 14.5px;
+  }
+}
+
+/* 系统开启「减弱动态效果」时取消位移动画，避免不适 */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
 }
 </style>

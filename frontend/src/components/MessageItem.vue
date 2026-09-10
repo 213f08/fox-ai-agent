@@ -180,6 +180,10 @@ function cancelEdit() {
   max-width: min(720px, 78%);
   border-radius: 16px;
   line-height: 1.6;
+  /* column flex：让 .msg-actions 在触屏下能用 order 排到内容之后。
+     桌面端 .msg-actions 是 absolute 脱离文档流，不受 order 影响，视觉无变化。 */
+  display: flex;
+  flex-direction: column;
 }
 
 /* 同级操作按钮组：复制 / 撤回，悬浮整行消息时出现在气泡上角。
@@ -483,6 +487,118 @@ function cancelEdit() {
   30% {
     transform: translateY(-6px);
     opacity: 1;
+  }
+}
+
+/* ===== 触屏设备：操作按钮常驻 =====
+   桌面靠 .msg-row:hover 显示复制/撤回，触屏没有 hover，
+   原本 opacity:0 + pointer-events:none 让按钮彻底不可达。
+   这里改成静态排在气泡内容下方，始终可见可点。
+   同时覆盖窄屏窗口：那种宽度下也不该依赖 hover。 */
+@media (hover: none), (max-width: 820px) {
+  .msg-actions {
+    position: static;
+    order: 5;
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+    margin-top: 8px;
+    padding-top: 7px;
+    border-top: 1px dashed rgba(148, 163, 184, 0.4);
+  }
+  /* order:5 排在 .steps / .content 之后；左右对齐沿用气泡自身的方向 */
+  .msg-row.user .msg-actions {
+    justify-content: flex-end;
+  }
+  .msg-row.assistant .msg-actions {
+    justify-content: flex-start;
+  }
+
+  /* 手指目标要够大：内边距撑到约 30px 高、点击区域含间隔 */
+  .act-btn {
+    padding: 5px 13px;
+    font-size: 12px;
+  }
+  .act-btn:active {
+    color: var(--primary);
+    border-color: var(--primary);
+    background: rgba(47, 107, 255, 0.08);
+  }
+  .act-btn.recall:active {
+    color: var(--danger);
+    border-color: var(--danger);
+    background: rgba(239, 68, 68, 0.08);
+  }
+
+  /* 用户气泡是蓝底白字，分隔线和按钮要换配色才不糊 */
+  .bubble.user .msg-actions {
+    border-top-color: rgba(255, 255, 255, 0.32);
+  }
+
+  .recalled-edit:active {
+    background: rgba(47, 107, 255, 0.12);
+  }
+  .reedit-cancel:active {
+    background: rgba(31, 79, 216, 0.1);
+  }
+  .reedit-send:not(:disabled):active {
+    transform: scale(0.97);
+  }
+}
+
+/* ===== 移动端布局 ===== */
+@media (max-width: 820px) {
+  .msg-row {
+    gap: 8px;
+  }
+
+  .avatar {
+    width: 32px;
+    height: 32px;
+  }
+
+  /* 助手侧要给头像 32px + 间距 8px 让位，否则气泡被挤出屏幕产生横向滚动 */
+  .bubble.assistant {
+    max-width: calc(100% - 42px);
+    padding: 9px 12px;
+  }
+  .bubble.user {
+    max-width: 88%;
+    padding: 8px 13px;
+  }
+
+  .content {
+    font-size: 15px;
+  }
+
+  /* 撤回提示卡：窄屏优先保证「重新编辑」按钮可见，原文压到 1 行 */
+  .recalled-card {
+    max-width: 100%;
+    gap: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  .recalled-text {
+    -webkit-line-clamp: 1;
+  }
+
+  /* 重新编辑框占满可用宽度，手机上不再缩在右侧 78% */
+  .reedit-box {
+    width: 100%;
+  }
+
+  /* 过程步骤里的内容较长，压低高度避免撑满整屏 */
+  .steps-body {
+    max-height: 200px;
+  }
+  .step-item {
+    font-size: 11px;
+    max-height: 150px;
+  }
+
+  /* 「已复制」态在触屏下 1.2s 后自动还原，给个视觉过渡更明显 */
+  .act-btn.ok {
+    background: rgba(16, 185, 129, 0.1);
   }
 }
 </style>

@@ -19,7 +19,9 @@ function autoResize() {
   const el = ta.value
   if (!el) return
   el.style.height = 'auto'
-  el.style.height = Math.min(el.scrollHeight, 160) + 'px'
+  // 移动端键盘弹出后留给输入框的高度更少，上限收到 120px
+  const max = window.matchMedia('(max-width: 820px)').matches ? 120 : 160
+  el.style.height = Math.min(el.scrollHeight, max) + 'px'
 }
 
 function resetHeight() {
@@ -53,6 +55,10 @@ function onKeydown(e) {
         rows="1"
         :disabled="sending"
         :placeholder="placeholder"
+        enterkeyhint="send"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
         @input="autoResize"
         @keydown="onKeydown"
         @focus="focused = true"
@@ -161,5 +167,40 @@ textarea::placeholder {
 .stop-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 8px 18px rgba(239, 68, 68, 0.42);
+}
+
+/* ===== 移动端 / 触屏 ===== */
+@media (max-width: 820px) {
+  .input-wrap {
+    gap: 6px;
+    padding: 6px 8px 6px 14px;
+    border-radius: 22px;
+  }
+
+  /* iOS Safari 会对 font-size < 16px 的输入框在聚焦时自动放大整个页面，
+     导致界面被推开、要手动缩小。16px 是避免这个行为的硬性下限。 */
+  textarea {
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  /* 触屏手指目标放大到 42px */
+  .send-btn,
+  .stop-btn {
+    width: 42px;
+    height: 42px;
+  }
+}
+
+/* 触屏没有真实 hover：把 hover 的位移换成按下反馈 */
+@media (hover: none) {
+  .send-btn:not(:disabled):hover,
+  .stop-btn:hover {
+    transform: none;
+  }
+  .send-btn:not(:disabled):active,
+  .stop-btn:active {
+    transform: scale(0.93);
+  }
 }
 </style>

@@ -101,6 +101,9 @@ function isStreaming(index) {
   flex: 1;
   overflow-y: auto;
   padding: 18px 20px 10px;
+  /* 列表滚到底继续滑动时不带动整页 */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .msg-inner {
@@ -142,5 +145,27 @@ function isStreaming(index) {
   text-align: center;
   font-size: 12px;
   color: var(--text-3);
+}
+
+/* ===== 移动端 ===== */
+@media (max-width: 820px) {
+  .msg-scroll {
+    padding: 12px calc(12px + var(--sar)) 6px calc(12px + var(--sal));
+  }
+
+  /* 窄屏消息之间收紧一点，一屏能多看到一条 */
+  .msg-inner {
+    gap: 11px;
+  }
+
+  /* 底部补上 iPhone 手势条的高度，否则发送键会被压在横条下面点不到 */
+  .chat-input-bar {
+    padding: 8px calc(12px + var(--sar)) calc(12px + var(--sab)) calc(12px + var(--sal));
+  }
+
+  .disclaimer {
+    margin-top: 8px;
+    font-size: 11px;
+  }
 }
 </style>

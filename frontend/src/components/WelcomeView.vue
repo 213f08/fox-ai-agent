@@ -228,12 +228,77 @@ function send(text) {
   color: var(--text-3);
 }
 
-@media (max-width: 640px) {
-  .prompt-grid {
-    grid-template-columns: 1fr;
+/* ===== 移动端 ===== */
+@media (max-width: 820px) {
+  .welcome {
+    padding: 20px calc(16px + var(--sar)) calc(16px + var(--sab)) calc(16px + var(--sal));
+  }
+
+  /* 关键：把 .hero 从 flex:1 改成内容高度 + 上下 auto margin。
+     flex:1 配合 justify-content:center 在内容超出容器时会把顶部裁掉且滚不上去，
+     auto margin 在空间不足时会自动收成 0，内容正常从顶部排列、可以滚动。 */
+  .hero {
+    flex: 0 0 auto;
+    justify-content: flex-start;
+    margin: auto 0;
+  }
+
+  .brand-logo {
+    width: 54px;
+    height: 54px;
+    margin-bottom: 10px;
   }
   .brand-title {
-    font-size: 24px;
+    font-size: 25px;
+  }
+  .brand-sub {
+    margin-top: 8px;
+    font-size: 14px;
+  }
+
+  /* 手机上每行放两张卡片会挤成豆腐块，改单列 */
+  .prompt-grid {
+    margin-top: 24px;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .prompt-card {
+    padding: 14px 16px;
+    gap: 12px;
+    align-items: center;
+  }
+  /* 触屏没有 hover，用按下反馈替代上浮效果 */
+  .prompt-card:active {
+    transform: scale(0.985);
+    border-color: rgba(47, 107, 255, 0.28);
+  }
+
+  .pc-icon {
+    width: 38px;
+    height: 38px;
+  }
+  .pc-title {
+    font-size: 14.5px;
+  }
+  .pc-desc {
+    font-size: 12.5px;
+  }
+
+  .welcome-input {
+    margin-top: 20px;
+  }
+  .disclaimer {
+    margin-top: 10px;
+    font-size: 11px;
+  }
+}
+
+/* 触屏：取消 hover 上浮（会残留状态） */
+@media (hover: none) {
+  .prompt-card:hover {
+    transform: none;
+    box-shadow: var(--shadow-sm);
+    border-color: var(--border);
   }
 }
 </style>
